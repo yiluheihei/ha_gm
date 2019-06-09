@@ -1,0 +1,975 @@
+---
+title: "The effect of heat acclimation on gut microbiota"
+author: "Yang"
+date: "2019/6/4"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    fig_caption: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = TRUE,
+  fig.path = "output/figure/",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r package, message=FALSE}
+library(tidyverse)
+library(ggsci) # scale_color_npg
+library(tools) # file_path_sans_ext
+library(phyloseq)
+library(microbiome)
+library(eulerr) # venn diagram
+library(ggpubr) # as_ggplot
+library(patchwork) # arrange multiple plots
+library(vegan) # multi-response permutation procedure (MRPP) and adonis
+library(hrbrthemes) # scale_y_percent
+library(DESeq2)
+library(ComplexHeatmap) # heatmap
+# heatmaptree
+library(ggtree)
+library(treeio)
+
+library(circlize) # colorRamp2
+library(ggfortify) # pca
+library(ggsignif) # geom_signif
+```
+
+```{r source_script}
+sourceDir <- function(path, trace = TRUE, ...) {
+    for (nm in list.files(path, pattern = "[.][RrSsQq]$")) {
+       if (trace) cat(nm,":")
+       source(file.path(path, nm), ...)
+       if (trace) cat("\n")
+    }
+}
+sourceDir("src/R/")
+```
+
+# Effects of HA on core body temperature
+
+To confirm the protective role of HA, the rectal temperature (Tre), a higher, more reliable and more stable method to measure core body temperature, was assessed and compared between HA and CR subjects. **Supplementary Figure S1 shows** that the Tre profile of HA subjects significantly increased in response to the first and second weeks of heat exposure followed by a slow and stable change to a Tre that was significantly decreased to the same level as before exposure. 
+
+```{r tre, fig.width=5, fig.height=4, fig.cap="**Supplementary Figure S1.** Changes in rectal temperature during 28 days of heat exposure."}
+tre <- read_tsv("data/raw/tre.tsv")
+p_s1 <- ggplot(tre) +
+  stat_summary(
+    fun.y = "mean", aes(x = days, y = rt, color = state), 
+    geom = "point", size = 3) +
+  stat_summary(fun.y = "mean", aes(x = days, y = rt, color = state), 
+    geom = "line") +
+  labs(x = "Days", y = "Rectal temperature (°C)") +
+  guides(color = guide_legend(title = NULL)) +
+  # scale_x_date(date_breaks = "2 day", date_labels = "%m/%d") +
+  theme_bw() +
+  scale_color_npg() +
+  scale_x_continuous(
+    breaks = seq.int(0, 36, by = 2),
+    labels = seq.int(0, 36, by = 2)
+  ) +
+  theme(legend.position = c(0.9, 0.8))
+# ggsave("output/figure/figure_s1.pdf", p_s1, width = 5, height = 4)
+p_s1
+```
+
+# Quality control of 16S rRNA microbiome profilling
+
+## Reads summary
+
+To assess the changes of the gut microbiota in HA, the gut microbiota was sequenced on 1 day before HA (day 0), and days 14 and 28 in both HA and CR subjects.
+
+Quality filtering on the raw reads were performed under specific filtering conditions to obtain the high-quality clean reads according to the Cutadapt quality controlled process. Chimera sequences were identified and removed using UCHIME algorithm. 
+
+```{r reads_summary}
+reads_sample_name <- c(
+  paste0("HA.", rep(c("28.", "14.", "0."), each = 8), c(1:4, 6:9)),
+  paste0("CR.", rep(c("28.", "14.", "0."), each = 8), c(1, 3:7, 9, 10))
+)
+
+reads_summary <- read_tsv("data/raw/reads_summary.txt") %>%
+  filter(`#Sample_name` %in% reads_sample_name) %>% # select 48 samples
+  mutate(`#Sample_name` = ifelse(str_detect(`#Sample_name`, "^HA"), # sample name transform
+    str_replace(`#Sample_name`, "^HA", "CR"),
+    str_replace(`#Sample_name`, "^CR", "HA")
+  ))
+
+# write_tsv(reads_summary, "data/raw/reads_summary_new.txt")
+
+# total reads
+total_reads <- sum(reads_summary$`Raw_reads(#)`)
+total_reads
+
+# high quality reads
+effective_reads <- sum(reads_summary$`Clean_Reads(#)`)
+effective_reads
+
+# mean reads per sample
+effective_reads / 48
+
+# range of reads across samples
+range(reads_summary$`Clean_Reads(#)`)
+```
+
+A total of 4062872 reads were obtained which reduced to 3824443 reads after quality filtering (chimera) corresponding to a mean of 79675 reads per sample (ranging from 60593 to 82017).
+
+## OTU comparison
+
+A total of 1374 OTUs were identified which has a minimum count of 0.0005 of total reads across samples.
+
+```{r import_qiime_pick_otu}
+qiime_otu_table <- import_biom(
+  BIOMfilename = "data/raw/qiime/otu_table_mc2_w_tax_no_pynast_failures.biom",
+  treefilename = "data/raw/qiime/rep_set.tre"
+)
+
+# set the taxonomic ranks manually
+colnames(tax_table(qiime_otu_table)) <- c(
+  "Kingdom", "Phylum", "Class", "Order",
+  "Family", "Genus", "Species"
+)
+
+mapping <- import_qiime_sample_data(mapfilename = "data/raw/mapping_new.txt")
+ps_initial <- merge_phyloseq(qiime_otu_table, mapping)
+
+# filter low confidence otu
+# filter low confidence otu
+otu_reads <- taxa_sums(ps_initial)
+big_otu <- otu_reads[otu_reads/sum(otu_reads) > 0.00005]
+ps_big <- prune_taxa(names(big_otu), ps_initial)
+
+# 1374 OTUs
+ntaxa(ps_big)
+```
+
+As we expected, no significant differences were found between CR and HA on day 0 by comparing the number of OTUs (1038 and 1071 OTUs; P = 0.6, Wilcoxon sum test; Supplementary Figure S2A, C). The number of OTUs was significant different between CR and HA on day 28 (1207 and 1279 OTUs, respectively; P = 0.014, Wilcoxon sum test) rather and day 14 (1313 and 1295 OTUs; P = 0.19, Wilcoxon sum test). (Supplementary Figure S2A, D, E).
+
+The averaged coverage and subsampling were sufficient to describe gut bacterial communities according to sequencing-based rarefaction curves (Supplementary Figure S2B).
+
+```{r rare_curve}
+p_s2b <- plot_rarecurve(ps_big) + labs(y = "Number of OTUs")
+```
+
+```{r otu_boxplot}
+# comparison of the number of otus
+ps_meta <- meta(ps_big)
+otus_number <- otu_table(ps_big)@.Data %>% 
+  as_tibble() %>% 
+  map_int(., ~ sum(.x > 0))
+
+otu_number_df <- tibble(
+  sample = ps_meta$X.SampleID, 
+  treatment = ps_meta$Treatment, 
+  time = ps_meta$Time,
+  otus_number = otus_number)
+
+p_s2a <- ggplot(otu_number_df, aes(treatment, otus_number, fill = treatment)) +
+  geom_boxplot() +
+  facet_wrap(~time, labeller = labeller(time = function(x) paste0("Day:", x))) +
+  theme_bw() +
+  ylab("Number of OTUs") +
+  xlab(NULL) +
+  theme(legend.position = "none") +
+  expand_limits(y = c(250, 1150)) +
+  stat_compare_means(comparisons = list(c("CR", "HA")), label = "p.signif", tip.length = 0, label.y = 1100) +
+  scale_fill_npg()
+```
+```{r otu_venn}
+npg_colors_2 <- ggsci::pal_npg("nrc")(2)
+ps_0 <- subset_samples(ps_big, Time == 0) %>% 
+  prune_taxa(taxa_sums(.) > 0, .)
+p_s2c <- generate_venn_diagram(ps_0) %>% 
+   plot(
+     fills = list(fill = npg_colors_2, alpha = 0.6),
+     legend = list(side = "top", nrow = 1, ncol = 2),
+     labels = FALSE,
+     quantities = list(fontsize = 10)
+    )
+  
+
+ps_14 <- subset_samples(ps_big, Time == 14) %>% 
+  prune_taxa(taxa_sums(.) > 0, .)
+p_s2d <- generate_venn_diagram(ps_14) %>% 
+  plot(
+    fills = list(fill = npg_colors_2, alpha = 0.6),
+    legend = FALSE,
+    labels = FALSE,
+      quantities = list(fontsize = 10)
+    )
+
+ps_28 <- subset_samples(ps_big, Time == 28) %>% 
+  prune_taxa(taxa_sums(.) > 0, .)
+p_s2e <- generate_venn_diagram(ps_28) %>% 
+  plot(
+    fills = list(fill = npg_colors_2, alpha = 0.6),
+    legend = FALSE,
+    labels = FALSE, 
+    quantities = list(fontsize = 10)
+    )
+```
+
+```{r figures2,fig.width=10,fig.height=7, fig.cap="**Supplementary Figure S2**. Quality control of 16S rRNA V3-V4 reads. Number of OTUs **(A)** after quality filtering on day 0, 14 and 28. Wilcoxon test was used to compare CR and HA. **(B)** Rarefaction curves for all samples with X axis representing number of sequences and Y axis representing number of observed taxa. Venn diagram showing the number of OTUs exclusively identified in each group on day 0 **(C)**, 14 **(D)** and day 28 **(E)**."}
+p_s2 <- {p_s2a + p_s2b + plot_layout(nrow = 1, width = c(1.5, 1))} -
+  {as_ggplot(p_s2c) + as_ggplot(p_s2d) + as_ggplot(p_s2e) +  
+      plot_layout(nrow = 1)} +
+  plot_layout(ncol = 1) + plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_s2.pdf", p_s2, width = 10, height = 7)
+p_s2
+```
+
+
+
+# Composition shifts of gut microbiota in HA
+
+## No significant differences in microbiome diversity on day 0
+
+No significant differences were found in microbiome diversity between CR and HA (Supplementary Figure S3)
+
+```{r alpha_0}
+alpha_diversity <- estimate_richness(ps_big)
+alpha_diversity$sample <- row.names(alpha_diversity)
+alpha_df <- full_join(ps_meta, alpha_diversity, 
+  by = c("X.SampleID" = "sample"))
+
+# day 0 附件
+alpha_df_0 <- filter(alpha_df, grepl(0, X.SampleID)) %>% 
+  select(one_of("Observed", "Shannon", "Simpson", "ACE", "Treatment")) %>% 
+  gather("index", "value", -Treatment)
+
+p_alpha_0 <- ggplot(alpha_df_0, aes(Treatment, value, fill = Treatment)) +
+  geom_boxplot() +
+  facet_wrap(~index, scales = "free_y", nrow = 1) + 
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_fill_npg() +
+  stat_compare_means(comparisons = list(c("CR", "HA")), 
+    label = "p.signif", tip.length = 0) +
+  # scale_x_discrete(labels = c("HA","control" = "CR")) +
+  labs(x = NULL, y = "Alpha Diversity Measure")
+```
+
+Anosim and multi-response permutation procedure (MRPP) anylysis between different groups on day 0
+
+```{r anosim_0}
+## anosim, MRPP, bray wunifrac
+pvalue_0 <- compare_groups(ps_0)
+pvalue_0
+```
+
+Beta diversity
+
+```{r beta_0}
+min_reads_0 <- min(sample_sums(ps_0))
+ps_ev_0 = transform_sample_counts(ps_0, 
+  function(x) min_reads_0 * x/sum(x))
+pcoa_bray_0 <- ordinate(ps_ev_0, method = "PCoA", distance = "bray")
+p_beta_bray_0 <- plot_ordination(ps_ev_0, pcoa_bray_0, 
+  axes = c(1, 2),
+  color = "Treatment") + 
+  geom_point(size = 2) +
+  theme_bw() + 
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank(), legend.position = "none")
+  # annotate("text",
+  #   label = "bold(Anosim)~~Bray~italic(P)==0.46~~Jaccard~italic(P)==0.49", 
+  #   x=0.25, y=-0.77, parse = TRUE, size = 3)
+
+pcoa_jaccard_0 <- ordinate(ps_ev_0, method = "PCoA", distance = "jaccard")
+p_beta_jaccard_0 <- plot_ordination(ps_ev_0, pcoa_jaccard_0,
+  axes = c(1, 2),
+  color = "Treatment") +
+  geom_point(size = 2) +
+  # stat_ellipse(level = 0.95) +
+  # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
+  theme_bw() +
+  scale_color_npg() +
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank())
+  # annotate("text",
+  #   label = "bold(MRPP)~~Bray~italic(P)==0.377~~Jaccard~italic(P)==0.368", 
+  #   x=0, y=-0.78, parse = TRUE, size = 3)
+```
+
+```{r figures3, fig.width=7, fig.height=6, fig.cap = "**Supplementary Figure S3.** Diversity analysis on day 0. (A) Alpha diversity assessed by richness (ACE, Observed), diversity (Shannon, Simpson). Boxes represent the interquartile ranges, and the inside black plots represent the median and circles are outliers. P values are from Wilcoxon rank sum test. Beta diversity assessed by Principal coordinate analysis (PCoA) based on the Bray-Curtis (B) and Jaccard (C) distances. P values are from Wilcoxon rank sum test. P values: ns, no significance P > 0.05."}
+p_s3 <- p_alpha_0 - {p_beta_bray_0 + p_beta_jaccard_0 + plot_layout(nrow = 1)} +
+  plot_layout(nrow = 2, heights = c(1.4, 1)) + plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_s3.pdf", p_s3, width = 7, height = 6)
+p_s3
+```
+
+## No significant differences in microbiome diversity on day 14
+
+No significant differences were observed in alpha diversity indices on day 14 (Supplementary Figure S4 A, all P > 0.05, Wilcoxon sum test).
+
+```{r alpha_14}
+alpha_df_14 <- filter(alpha_df, grepl(14, X.SampleID)) %>% 
+  select(one_of("Observed", "Shannon", "Simpson", "ACE", "Treatment")) %>% 
+  gather("index", "value", -Treatment)
+
+p_alpha_14 <- ggplot(alpha_df_14, aes(Treatment, value, fill = Treatment)) +
+  geom_boxplot() +
+  facet_wrap(~index, scales = "free_y", nrow = 1) + 
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_fill_npg() +
+  stat_compare_means(comparisons = list(c("CR", "HA")), 
+    label = "p.signif", tip.length = 0) +
+  # scale_x_discrete(labels = c("HA","control" = "CR")) +
+  labs(x = NULL, y = "Alpha Diversity Measure")
+```
+
+Anosim and multi-response permutation procedure (MRPP) anylysis between different groups on day 14
+
+```{r anosim_14}
+## anosim, MRPP, bray wunifrac
+pvalue_14 <- compare_groups(ps_14)
+pvalue_14
+```
+
+Beta diverisy
+
+```{r beta_14}
+min_reads_14 <- min(sample_sums(ps_14))
+ps_ev_14 = transform_sample_counts(ps_14, 
+  function(x) min_reads_14 * x/sum(x))
+pcoa_bray_14 <- ordinate(ps_ev_14, method = "PCoA", distance = "bray")
+p_beta_bray_14 <- plot_ordination(ps_ev_14, pcoa_bray_14, 
+  axes = c(1, 2),
+  color = "Treatment") + 
+  geom_point(size = 2) +
+  theme_bw() + 
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank(), legend.position = "none")
+  # annotate("text",
+  #   label = "bold(Anosim)~~Bray~italic(P)==0.46~~Jaccard~italic(P)==0.49", 
+  #   x=0.25, y=-0.77, parse = TRUE, size = 3)
+
+pcoa_jaccard_14 <- ordinate(ps_ev_14, method = "PCoA", distance = "jaccard")
+p_beta_jaccard_14 <- plot_ordination(ps_ev_14, pcoa_jaccard_14,
+  axes = c(1, 2),
+  color = "Treatment") +
+  geom_point(size = 2) +
+  # stat_ellipse(level = 0.95) +
+  # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
+  theme_bw() +
+  scale_color_npg() +
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank())
+  # annotate("text",
+  #   label = "bold(MRPP)~~Bray~italic(P)==0.377~~Jaccard~italic(P)==0.368", 
+  #   x=0, y=-0.78, parse = TRUE, size = 3)
+```
+
+##  Microbiome diversity is significantly different on day 28
+
+Alpha diversity showed a significant increase in the HA group compared to the control on day 28 (Figure 1A, all P < 0.05, Wilcoxon sum test).
+
+```{r mean_compositon}
+alpha_df_28 <- filter(alpha_df, grepl(28, X.SampleID)) %>% 
+  select(one_of("Observed", "Shannon", "Simpson", "ACE", "Treatment")) %>% 
+  gather("index", "value", -Treatment)
+
+p_alpha_28 <- ggplot(alpha_df_28, aes(Treatment, value, fill = Treatment)) +
+  geom_boxplot() +
+  facet_wrap(~index, scales = "free_y", nrow = 1) + 
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_fill_npg() +
+  stat_compare_means(comparisons = list(c("CR", "HA")), 
+    label = "p.signif", tip.length = 0) +
+  scale_x_discrete(labels = c("heat" = "HA","control" = "CR")) +
+  labs(x = NULL, y = "Alpha Diversity Measure")
+```
+
+HA group were clearly separated from control group on day 28 (all P < 0.05 by Anosim and multi-response permutation procedure (MRPP) analysis, for Bray and Jaccard distances, respectively) (Figure 1B, C).
+
+```{r anosim_28}
+## anosim, MRPP, bray wunifrac
+pvalue_28 <- compare_groups(ps_28)
+pvalue_28
+```
+
+```{r beta_28}
+min_reads <- min(sample_sums(ps_28))
+ps_ev_28 = transform_sample_counts(ps_28, function(x) min_reads * x/sum(x))
+
+pcoa_bray_28 <- ordinate(ps_ev_28, method = "PCoA", distance = "bray")
+p_beta_bray_28 <- plot_ordination(ps_ev_28, pcoa_bray_28, 
+  axes = c(1, 2),
+  color = "Treatment") + 
+  geom_point(size = 2) +
+  stat_ellipse(level = 0.95) + 
+  # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) + 
+  theme_bw() + 
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank(), legend.position = "none") +
+  annotate("text",
+    label = "bold(Anosim)~~Bray~italic(P)==0.002~~Jaccard~italic(P)==0.004", 
+    x=-0.18, y=-0.77, parse = TRUE, size = 3)
+  # annotation_custom(ggplotGrob(p_pvalue_28), xmin = -0.75, 
+  #  xmax = -0.4, ymin = 0.4)
+pcoa_jaccard_28 <- ordinate(ps_ev_28, method = "PCoA", distance = "jaccard")
+p_beta_jaccard_28 <- plot_ordination(ps_ev_28, pcoa_jaccard_28,
+  axes = c(1, 2),
+  color = "Treatment") +
+  geom_point(size = 2) +
+  stat_ellipse(level = 0.95) +
+  # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
+  theme_bw() +
+  scale_color_npg() +
+  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  theme(legend.title = element_blank()) + 
+  annotate("text",
+    label = "bold(MRPP)~~Bray~italic(P)==0.007~~Jaccard~italic(P)==0.008", 
+    x=-0.2, y=-0.78, parse = TRUE, size = 3)
+```
+```{r figure1, fig.width=8, fig.height=7, fig.cap="**Figure 1.** Diversity analysis on day 28. (A) Alpha diversity assessed by richness (ACE, Observed), diversity (Shannon, Simpson). Boxes represent the interquartile ranges, and the inside black plots represent the median and circles are outliers. P values are from Wilcoxon rank sum test. Beta diversity assessed by Principal coordinate analysis (PCoA) based on the Bray-Curtis (B) and Jaccard (C) distances. Significant P-values of Anosim and multi-response permutation procedure (MRPP) between groups emphasize the differences in microbial community structure. P values: * P < 0.05, ** P < 0.01."}
+p_f1 <- p_alpha_28 + {p_beta_bray_28 + p_beta_jaccard_28 + plot_layout(ncol = 2)} +
+  plot_layout(nrow = 2, heights = c(1.3, 1)) + plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_1.pdf", p_f1, width = 8, height = 7)
+p_f1
+```
+## Micriobiome compostion at phylum level 
+
+
+Phylum compostion of all samples
+
+```{r figure2a, fig.width=6,fig.height=6, fig.cap="**Figure 2A.** Relative abundance of bacterial at the phylum level."}
+top_phylum <- aggregate_top_taxa(ps_big, 8, "Phylum") %>% 
+  microbiome::transform("compositional")
+p_composition <- plot_composition2(top_phylum) + scale_fill_npg() + 
+  labs(x = NULL, y = "Relative abundance")
+ggsave("output/figure/figure_2a.pdf", p_composition, width = 6, height = 6)
+p_composition
+```
+
+
+Since population differences in the gut microbiota only observed between HA and CR on day 28, only subjects on day 28 were considered in the following analysis. To identify the taxa that were differentially represented in HA and CR subjects, we compared the relative abundances between these two groups at different taxonomic levels.
+
+The dominant of the bacterial phyla identified in the fecal samples were encompassed by Firmicutes, Bacteroidetes, Proteobacteria, Cyanobacteria and Actinobacteria (Figure S4D). 
+
+There were subtle differences in bacterial community composition between HA and CR subjects (Supplementary Figure S4D)
+
+```{r mean_compositon_28}
+p_mean_comosition <- subset_samples(top_phylum, Time == 28) %>% 
+  plot_composition2(group = "group") +
+  # scale_fill_manual(values = color[[1]]) +
+  scale_x_discrete(labels = c("CR28" = "CR", "HA28" = "HA")) +
+  scale_y_percent() + 
+  theme_bw() +
+  scale_fill_npg() + 
+  labs(x = NULL, y = "Relative abundance") + 
+  coord_flip() +
+  theme(legend.position = "bottom")
+```
+
+```{r figres4,fig.width=8, fig.height=10, fig.cap="**Supplementary Figure S4.** Diversity analysis on day 14. (A) Alpha diversity assessed by richness (ACE, Observed), diversity (Shannon, Simpson). Boxes represent the interquartile ranges, and the inside black plots represent the median and circles are outliers. P values are from Wilcoxon rank sum test. Beta diversity assessed by Principal coordinate analysis (PCoA) based on the Bray-Curtis (B) and Jaccard (C) distances. Significant P-values of Anosim and multi-response permutation procedure (MRPP) between groups emphasize the differences in microbial community structure. (D) Relative abundance of bacterial phyla. P values: ng, no significance P > 0.05."}
+p_s4 <- p_alpha_14 + {p_beta_bray_14 + p_beta_jaccard_14 + plot_layout(ncol = 2)} +
+  p_mean_comosition + 
+  plot_layout(nrow = 3, heights = c(1.4, 1, 0.8)) + plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_s4.pdf", p_s4, width = 8, height = 10)
+p_s4
+```
+
+However, no significant difference was found at phylum level (all P > 0.05, Wilcoxon sum test, Supplementary Table S1).
+
+```{r phylum_diff}
+calculate_p <- function(abdlist) {
+  t <- wilcox.test(abdlist[[1]], abdlist[[2]], paired = FALSE)
+  return(t$p.value)
+} 
+
+phylum_28 <- aggregate_taxa(ps_28, "Phylum") %>% 
+  microbiome::transform("compositional") %>% 
+  psmelt()
+
+phylum_p <- group_by(phylum_28, Phylum, Treatment) %>% 
+  do(abd = .$Abundance) %>% 
+  group_by(Phylum) %>% 
+  do(abdlist = .$abd) %>% 
+  mutate(p_value = calculate_p(abdlist))
+phylum_p$q <- p.adjust(phylum_p$p_value, "BH")
+  
+mean_phylum <- group_by(phylum_28, Phylum, Treatment) %>% 
+  summarise(mean = mean(Abundance)) %>% 
+  spread(Treatment, mean)
+
+diff_phylum <- inner_join(phylum_p, mean_phylum) %>% 
+  arrange(q) %>% 
+  mutate(`p-value` = round(p_value, 4), FDR = round(q, 4), 
+    CR = round(CR, 4), HA = round(HA, 4)) %>% 
+  select(Phylum, `p-value`, FDR, CR, HA)
+write_csv(diff_phylum, "output/table/table_s1.csv")
+diff_phylum
+```
+
+## Microbiome composition at genus level 
+
+Genus level analysis showed that there were four significantly differential genus in HA subjects compared to CR subjects, including Blautia, Oscillospira, Lactobacillus, Allobaculum,  lactobacillus, a common probiotic, was significantly increased in HA subjects (Supplementary Table S2).
+
+
+```{r genus_diff}
+genus <- aggregate_taxa(ps_28, "Genus") %>% 
+  format_unique_genus() %>% 
+  microbiome::transform("compositional") %>% 
+  psmelt()
+
+genus_p <- group_by(genus, Genus, Treatment) %>% 
+  do(abd = .$Abundance) %>% 
+  group_by(Genus) %>% 
+  do(abdlist = .$abd) %>% 
+  mutate(p_value = calculate_p(abdlist))
+genus_p$fdr <- p.adjust(genus_p$p_value, "BH")
+
+mean_genus <- group_by(genus, Genus, Treatment) %>% 
+  summarise(mean = mean(Abundance)) %>% 
+  spread(Treatment, mean)
+
+diff_genus <- inner_join(genus_p, mean_genus) %>% 
+  arrange(fdr) %>% 
+  mutate(`p-value` = round(p_value, 4), FDR = round(fdr, 4), 
+    CR = round(CR, 4), HA = round(HA, 4)) %>% 
+  select(Genus, `p-value`, FDR, CR, HA)
+
+write_csv(diff_genus, "output/table/table_s2.csv")
+diff_genus
+```
+
+The genera abundance distribution was quite discrepant to that of CRs (Figure 2C). 
+
+```{r figure2c, fig.width=6, fig.height=6, fig.cap="**Figure 2C.** Heatmap tree shows genera significantly different in HA compare to those in CR group, and their phylogenic relationships on day 28. The Abundance profiles are expressed by z-scores."}
+# relative abundance
+otus_28 <- tax_glom(ps_ev_28, "Genus") %>% 
+  otu_table()
+otus_28 <- otus_28@.Data
+d <- vegdist(otus_28)
+cluster <- hclust(d)
+tree <- treeio::as.phylo(cluster)
+# genus info
+tree_info <- tax_glom(ps_ev_28, "Genus") %>% tax_table() 
+tree_info <- tree_info@.Data
+tree_info_df <- data.frame(id = row.names(tree_info), tree_info)
+p_composition_level <- levels(p_composition$data$Phylum)
+tree_info_df$Phylum <- factor(tree_info_df$Phylum, 
+  levels = p_composition_level[-1])
+# p <- ggtree(tree, layout = "circular", branch.length = "none")
+p_tree_phylum <- ggtree(tree, layout = "circular", branch.length = "none") %<+% 
+  tree_info_df + 
+  geom_tippoint(aes(color=Phylum)) +
+  scale_color_npg() +
+  theme(legend.position = "none")
+
+# z score of genus
+heatmap_data <- microbiome::transform(tax_glom(ps_ev_28, "Genus"), transform = "Z")
+ht <- otu_table(heatmap_data)@.Data
+
+exp_group <- ifelse(grepl("^C", colnames(ht)), TRUE, FALSE)
+cr_zmean <- apply(ht[, exp_group], 1, mean)
+ha_zmean <- apply(ht[, !exp_group], 1, mean)
+nm <- row.names(ht)
+ht_df <- data.frame(CR = cr_zmean, HA = ha_zmean)
+
+p_heatmap_tree <- gheatmap(p_tree_phylum, ht_df, color = NULL, font.size = 2.5,
+  colnames_position = "top",
+  hjust = 0.4, width = 0.3) +
+  scale_fill_gradient2(low="blue", mid = "#EEEEEE", high = "red", 
+    breaks = c(-1, -0.5, 0, 0.5, 1), labels = c(-1, -0.5, 0, 0.5, 1)) +
+  guides(color = FALSE) +
+  # theme(legend.title = element_text(vjust = 0)) +
+  guides(fill = guide_colorbar(
+    title = "Z score",
+    title.position = "left",
+    # direction = "horizontal",
+    barheight = 0.8
+    # barwidth = 0.8
+    )) +
+  theme(legend.direction = "horizontal", 
+    legend.position = c(0.5, 0.02),
+    legend.title = element_text(vjust = 1))
+
+ggsave("output/figure/figure_2b.pdf", p_heatmap_tree, width = 6, height = 6, units = "in")
+p_heatmap_tree
+```
+
+To explore more precisely the taxa that were driving the differentiation of the microbiota of the groups, we performed differential analysis based on DESeq2 (Love et al., 2014), a method using negative binomial GLM to obtain maximum likelihood estimates between two conditions. Then the RA of taxa, which showed false discovery rate (FDR)-corrected P value < 0.05 with differential expression analysis conducted on whole microbiota profile, were expressed as heat map (Figure 2B, Supplementary Table S3).
+
+```{r deseq2, fig.width=8,fig.height=12, fig.cap="**Figure 2B.** Hierarchical clustering with a heat map shows the RA of representative OTUs (those with greatest difference between HA and CR on day 28) group means from each OTU selected for P < 0.05, obtained with differential abundance analysis with DESeq2. The OTUs are shown as phylum and family."}
+
+diagdds = phyloseq_to_deseq2(ps_28, ~ Treatment)
+
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x))
+}
+geoMeans = apply(counts(diagdds), 1, gm_mean)
+diagdds = estimateSizeFactors(diagdds, geoMeans = geoMeans)
+diagdds = DESeq(diagdds, fitType="local")
+res = results(diagdds)
+res = res[order(abs(res$padj), na.last=NA), ]
+# res_fc = res[order(res$log2FoldChange, na.last=NA,  decreasing = TRUE), ]
+alpha = 0.05
+sigtab = res[(res$padj < alpha), ]
+# sigtab_fc = res_fc[(res_fc$padj < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"),
+  as(tax_table(ps_28)[rownames(sigtab), ], "matrix"))
+
+diff_otu <- row.names(sigtab)
+otus <- otu_table(microbiome::transform(ps_28, "log10p"))
+diff_otus <- otus[row.names(otus) %in% diff_otu[1:40], ]
+diff_otus <- diff_otus@.Data
+taxas <- tax_table(ps_28)@.Data
+diff_taxas <- taxas[row.names(taxas) %in% row.names(diff_otus), ]
+row.names(diff_otus) <- paste(diff_taxas[, "Phylum"], 
+  diff_taxas[, "Family"], ";")
+# pheatmap::pheatmap(diff_otus, annotation_col = sample_col, cutree_cols = 2)
+p_heatmap <- Heatmap(diff_otus@.Data, column_split = 2, 
+  column_title = NULL,
+  col = colorRamp2(c(0,2,4), c("steelblue", "#EEEEEE", "red")),
+  column_names_gp = gpar(fontsize = 9),
+  row_names_gp = gpar(fontsize = 9),
+  bottom_annotation = HeatmapAnnotation(
+    fill = anno_block(gp = gpar(fill =c("grey24")),
+    labels = c("CR", "HA"), 
+    labels_gp = gpar(col = "white", fontface = "bold"))),
+  heatmap_legend_param = list(
+    x = unit(1, "cm"), y = unit(1, "cm"),
+    title = "Log Abundance", 
+    title_position = "leftcenter-rot",
+    legend_height = unit(6, "cm")),
+  
+)
+
+p_heatmap <- as_ggplot(grid.grabExpr(draw(p_heatmap)))
+ggsave("output/figure/figure_2c.pdf", p_heatmap, width = 8, height = 12)
+p_heatmap
+```
+
+```{r table_s3}
+st3 <- mutate(sigtab, 
+  baseMean = round(baseMean, 4),
+  log2FoldChange = round(log2FoldChange, 4),
+  lfcSE = round(lfcSE, 4),
+  stat = round(stat, 4),
+  pvalue = formatC(pvalue, format = "e", digits = 4),
+  padj = formatC(padj, format = "e", digits = 4)
+  ) %>% 
+  select(Genus, baseMean:padj)
+st3$OTU <- row.names(sigtab)
+
+st3 <- select(st3, OTU, Genus, baseMean, log2FoldChange, pvalue, padj)
+write_tsv(st3, "output/table/figure_s3.tsv")
+st3
+```
+
+## Biomaker prediction using lefse
+
+The following analysis inlcuding lefse OTU biomarker (using lefse) and functional prediction (usring picrust, lefse, and bugbase), is based on the taxa tables from qiime. Thus, we should convert the qiime taxa tables to the file that is compatible with lefse, picrust and bugbase.
+
+You should downloaded file 97_otus.fasta from https://gg-sg-web.s3-us-west-2.amazonaws.com/downloads/greengenes_database/gg_13_5/gg_13_5.fasta.gz before run the folling script, unzip it and put file 97_otus.fasta under directory `data/raw`.
+
+```{sh qiime2other, eval=FALSE}
+sh src/shell/qiime_to_lefse_picrust_bugbase.sh
+```
+
+Differentially abundant taxa (Supplementary Table S4) were further confirmed by LEfSe. Fist, generate the input file for lefse
+
+```{r lefse_input_process, eval=FALSE} 
+qiime_lefse <- read_tsv("data/processed/summaryize_taxa_L6/mapping_new_L6.txt") %>% 
+  select(Treatment, 
+    `Unassigned|Other`:`k__Bacteria|p__Verrucomicrobia|c__Verrucomicrobiae|o__Verrucomicrobiales|f__Verrucomicrobiaceae|g__Akkermansia`) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column('otu') %>% 
+  filter(!grepl("(Other)|(__)$", otu)) # 删除未确定的taxa
+  
+write_tsv(qiime_lefse, "data/processed/lefse_qiime/lefse_otu_input.txt", col_names = FALSE)
+```
+lefse analysis
+
+```{sh eval=FALSE}
+format_input.py data/processed/lefse_qiime/lefse_otu_input.txt \
+output/lefse_qiime/lefse_qiime.in -c 1 -o 1000000
+
+run_lefse.py output/lefse_qiime/lefse_qiime.in output/lefse_qiime/lefse_qiime_out.res
+
+plot_cladogram.py output/lefse_qiime/lefse_qiime_out.res output/lefse_qiime/figure_3.pdf \
+--dpi 300 --format pdf --title="" --right_space_prop 0.3 --label_font_size 8
+```
+
+```{r figure3}
+include_graphics("output/lefse_qiime/figure_3.pdf")
+```
+
+```{r table_s4}
+lefse_otu_marker <- 
+  read_tsv(
+    "output/lefse_qiime/lefse_qiime_out.res", 
+    col_names = c("otu", "mean_abd", "enrich_group", "lda", "p")
+  ) %>% 
+  filter(!is.na(enrich_group)) %>% 
+  mutate(lda = round(lda, 4),
+    p = round(as.numeric(p), 4)) %>% 
+  select(otu, enrich_group, lda, p) %>% 
+  arrange(desc(enrich_group), desc(lda))
+
+write_tsv(lefse_otu_marker, "output/lefse_qiime/table_s4.tsv")
+lefse_otu_marker
+```
+
+
+# Functional shifts of gut microbiota in HA
+
+## Functional prediction using PICRUSt
+
+To infer the functional alternations of gut microbiota in HA, we employed PICRUSt (Langille et al., 2013) algorithm to predict the functional composition profiles from 16S rRNA gene-based microbial compositions.
+
+```{sh picrust, eval=FALSE}
+# Normalize OTU Table
+normalize_by_copy_number.py -i data/processed/picrust.biom \
+-o output/picrust_kegg/normaolized_otus.biom
+
+# Predict Functions For Metagenome
+predict_metagenomes.py -i output/picrust_kegg/normaolized_otus.biom \
+-o output/picrust_kegg/metagenome_predictions.biom
+
+# convert to tab for pca 
+biom convert -i output/picrust_kegg/metagenome_predictions.biom \
+-o output/picrust_kegg/metagenome_predictions.txt --to-tsv
+```
+
+Overall, the microbial communities present in HA and CR could be distinguished based on their functions (Supplementary Figure S5A).
+
+```{r, picrust_ko_pca}
+picrust_ko <- read_tsv(
+  "output/picrust_kegg/metagenome_predictions.txt", 
+  skip = 1
+)
+
+pca_in <- select(picrust_ko, -`#OTU ID`) %>% 
+  t()
+subjects_name <- row.names(pca_in)
+pca_color <- tibble(name = subjects_name, 
+  color = ifelse(grepl("^HA", subjects_name), "HA", "CR"))
+
+p_s5a <- autoplot(prcomp(pca_in), data = pca_color, colour = "color") + 
+  theme_bw() +
+  scale_color_npg() +
+  theme(legend.position = "none") 
+```
+
+Based on this, we then performed kegg pathway enrichment analysis using lefse.The thousands of predicted functions should be collapsed into higher categories (kegg pathway).
+
+```{sh kegg_pathway, eval=FALSE}
+categorize_by_function.py -f -i output/picrust_kegg/metagenome_predictions.biom \
+-c KEGG_Pathways -l 2 -o output/picrust_kegg/kegg_pathway_l2.txt
+```
+
+Format the kegg pathway to the file that is compatible with lefse.
+
+```{r lefse_kegg_in}
+picrust_kegg <- read_tsv("output/picrust_kegg/kegg_pathway_l2.txt", skip = 1) 
+picrust_kegg$pathway <- str_replace_all(picrust_kegg$`#OTU ID`, " ", "_")
+picrust_kegg$`#OTU ID` <- NULL
+picrust_kegg$KEGG_Pathways <- NULL
+picrust_kegg <- select(picrust_kegg, pathway, everything())
+
+picrust_kegg <- select(picrust_kegg, pathway, everything())
+lefse_class <- c("class", 
+  ifelse(grepl("^C", names(picrust_kegg)[-1]), "CR", "HA")) %>% 
+  matrix( ncol = ncol(picrust_kegg)) %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+ set_names(names(picrust_kegg))
+picrust_kegg <- rbind(lefse_class, picrust_kegg)
+write_tsv(picrust_kegg, "output/picrust_kegg/lefse_kegg_in.txt", col_names = FALSE)
+```
+
+The predicted KEGG pathway significantly enriched in HA included cell motility, signal transduction, lipid metabolism, metabolism of other amino acids, neurodegenerative diseases, environmental adaption and transport and catabolism (Supplementary Figure S5B, Supplementary Table S5). 
+
+```{sh picrust_kegg_pathway,eval=FALSE}
+format_input.py output/picrust_kegg/lefse_kegg_in.txt \
+output/picrust_kegg/lefse_kegg.in -c 1 -o 1000000
+
+run_lefse.py output/picrust_kegg/lefse_kegg.in \
+output/picrust_kegg/lefse_kegg_out.res
+```
+
+```{r lefse_pathway_vis}
+lefse_pathway <- read_tsv(
+  "output/picrust_kegg/lefse_kegg_out.res",
+  col_names = c("pathway", "mean_abd", "enrich_group", "lda", "p")
+)
+
+enrich_pathway <- filter(lefse_pathway, !is.na(enrich_group))
+
+# pathway ordered according to lda in different groups
+pathway_order <- arrange(enrich_pathway, 
+  desc(enrich_group), desc(lda))$pathway
+p_s5b <- ggplot(enrich_pathway, aes(pathway, lda)) +
+    geom_segment(aes(xend = pathway, yend = 0, colour = enrich_group), size = 6) +
+  theme_bw() +
+  scale_color_npg() +
+  labs(y = "LDA SCORE (log10)", x = "KEGG pathway") +
+  guides(colour = guide_legend(title = NULL)) +
+  theme(legend.position = "top") +
+  scale_x_discrete(limits = pathway_order) +
+  coord_flip()
+```
+
+Supplementary Figure S5
+
+```{r figures5, fig.width=12,fig.height=5,fig.cap="**Supplementary Figure S5.** **(A)** Principal component analysis (PCA) plot comparing the metagenome predictions for KO using PICRUSt of the microbiota of HA and CR subjects. **(B)** Predicted KEGG Pathways differentially abundant between HA and CR subjects."}
+p_s5 <- p_s5a + p_s5b + 
+  plot_layout(ncol = 2) +
+  plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_s5.pdf", p_s5, width = 12, height = 5)
+p_s5
+```
+
+```{r st5}
+lefse_pathway_marker <- 
+  read_tsv(
+    "output/picrust_kegg/lefse_kegg_out.res", 
+    col_names = c("otu", "mean_abd", "enrich_group", "lda", "p")
+  ) %>% 
+  filter(!is.na(enrich_group)) %>% 
+  mutate(lda = round(lda, 4),
+    p = round(as.numeric(p), 4)) %>% 
+  select(otu, enrich_group, lda, p) %>% 
+  arrange(desc(enrich_group), desc(lda))
+
+write_tsv(lefse_pathway_marker, "output/picrust_kegg//table_s5.tsv")
+lefse_pathway_marker
+```
+
+## Phynotypic prediction using Bubase
+
+We predicted nine potential phenotypes, including aerobic, anaerobic, containing mobile elements, facultatively anaerobic, biofilm forming, Gram negative, Gram positive, potentially pathogenic, and stress tolerant.
+
+Generate the bugbase mapping file
+
+```{r bugbase-mapping}
+bugbase_mapping <- meta(ps_28) %>% mutate(`#SampleID` = X.SampleID)
+bugbase_mapping <- select(bugbase_mapping, `#SampleID`, Treatment)
+
+write_tsv(bugbase_mapping, "output/bugbase/bugbase_mapping.txt")
+```
+
+Run bugbase 
+
+```{sh bugbase, eval=FALSE}
+run.bugbase.r -i data/processed/bugbase_json.biom  \
+-m output/bugbase/bugbase_mapping.txt -c Treatment \
+-o output/bugbase/bugbase_output_class_T0.001 -T 0.001 -t 3
+```
+
+Among all the phenotypes, the relative abundance of the Aerobic was significantly increased  and the stress tolerant was significantly decreased after HA (Figure 4).
+
+```{r bugbase-phenotype, fig.width=5,fig.height=4,fig.cap="**Figure 4.** Phenotypic prediction based on BugBase analysis. BugBase is a bioinformatics tool that infers community-wide phenotypes, and predict phenotypic differences from 16S rRNA sequence data. Among all the phenotypes, the relative abundance of the Aerobic was significantly increased and the stress tolerant was significantly decreased after HA subjects. Statistical significance was determined by Pairwise Wilcoxon tests. FDR-corrected pairwise P value ranges are: * P < 0.05."}
+bugbase_predictions <- read_tsv(
+  "output/bugbase/bugbase_output_class_T0.001/predicted_phenotypes/predictions.txt"
+) 
+mappings <- read_tsv("output/bugbase/bugbase_mapping.txt")
+
+phynotypes <- c(
+  "Aerobic",
+  "Anaerobic", 
+  "Contains_Mobile_Elements",
+  "Facultatively_Anaerobic",
+  "Forms_Biofilms",
+  "Gram_Negative",
+  "Gram_Positive",
+  "Potentially_Pathogenic",
+  "Stress_Tolerant"
+)
+
+extract_bugbase_p <- function(file) {
+  bugbase_stat <- read_tsv(file, col_names = FALSE)
+  
+  return(as.numeric(bugbase_stat[nrow(bugbase_stat), 1]))
+}
+
+files <- paste0("output/bugbase/bugbase_output_class_T0.001/predicted_phenotypes/",
+  phynotypes, "_stats.txt")
+phynotypes_p <- map_dbl(files, extract_bugbase_p)
+names(phynotypes_p) <- phynotypes
+  
+signf_phenotype <- phynotypes_p[phynotypes_p <= 0.05]
+bugbase_signf <- bugbase_predictions[c("X1", names(signf_phenotype))]
+
+
+
+bugbase_signf <- full_join(mappings, bugbase_signf, 
+  by = c("#SampleID" = "X1")) %>% 
+  gather("phenotype", "value", Aerobic:Stress_Tolerant)
+
+
+# different limits in different facet
+my_limits_df <- data.frame(Treatment = NA,
+  phenotype = rep(names(signf_phenotype), each =2),
+  value = c(0, 0.15, 0.98, 1.001))
+
+my_pvalue_df <- data.frame(
+  Treatment = NA,
+  phenotype = c(names(signf_phenotype)),
+  start = rep("CR",2), end = rep("HA", 2),
+  y = c(0.085, 1.0005),
+  label = rep("*", 2),
+  tip = c(0.002, 0.01)
+)
+
+p_bugbase <- ggplot(bugbase_signf, aes(x = Treatment, y = value, fill = Treatment)) +
+  geom_boxplot() +  
+  geom_signif(
+    data = my_pvalue_df,
+    aes(xmin = start, xmax = end, annotations = label, y_position = y, tip_length = tip),
+    textsize = 3, vjust = -0.2, manual = TRUE
+  ) + 
+  geom_blank(data = my_limits_df, aes(Treatment, value)) +
+  facet_wrap(~phenotype, scales = "free_y") +
+  scale_fill_npg() +
+  theme_bw() + 
+  labs(x = NULL, y = "Relative abundance") +
+  theme(legend.position = "none")
+ggsave("output/bugbase/figure_4.pdf", p_bugbase, width = 5, height = 4)
+p_bugbase
+```
+
+
+
+
+```{r mapping_new}
+mapping <- read_tsv("data/raw/mapping.txt")
+selected_reads_sample_name <- mapping$InputFileName %>%
+  tools::file_path_sans_ext()
+selected_reads_file_name <- paste0(selected_reads_sample_name, ".fna")
+
+reads_path <- "/Volumes/数据备份/诺禾致源结果/16S/第二阶段/P101SC18030731-01-B8-3_result/01.CleanData"
+# reads_sample_name <- list.dirs(reads_path, full.names = FALSE, recursive = FALSE)
+selected_reads_file <- file.path(
+  reads_path,
+  selected_reads_sample_name,
+  selected_reads_file_name
+)
+reads_file_to <- file.path(
+  "data/raw/reads",
+  map_chr(
+    selected_reads_file_name,
+    ~ ifelse(str_detect(.x, "^HA"), # sample name transform
+      str_replace(.x, "^HA", "CR"),
+      str_replace(.x, "^CR", "HA")
+    )
+  )
+)
+# file.copy(selected_reads_file, reads_file_to)
+mapping$InputFileName <- basename(reads_file_to)
+# write_tsv(mapping, "data/raw/mapping_new.txt")
+```
+
+

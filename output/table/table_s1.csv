@@ -1,0 +1,11 @@
+Phylum,p-value,FDR,CR,HA
+Unknown,0.0047,0.0466,7e-4,0.004
+p__Cyanobacteria,0.083,0.4149,0.0025,0.001
+p__Actinobacteria,0.3282,0.7219,0.0028,0.0029
+p__Bacteroidetes,0.5054,0.7219,0.3218,0.274
+p__Firmicutes,0.3823,0.7219,0.6503,0.6962
+p__Tenericutes,0.5054,0.7219,5e-4,6e-4
+p__Verrucomicrobia,0.3816,0.7219,0,0
+p__Fusobacteria,0.5897,0.7372,0,3e-4
+p__Crenarchaeota,0.7001,0.7779,0,1e-4
+p__Proteobacteria,0.9591,0.9591,0.0213,0.0209

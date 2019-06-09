@@ -1,0 +1,24 @@
+
+Number of samples in each treatment group:
+
+CR HA 
+ 8  8 
+
+Relative Abundance with trait (mean):
+       CR        HA 
+0.9500581 0.9146248 
+
+Relative Abundance with trait (median):
+       CR        HA 
+0.9656608 0.9092414 
+
+Standard deviation:
+        CR         HA 
+0.03648619 0.05309461 
+
+Mann-Whitney-Wilcoxon Test was performed.
+p-values is:
+0.1948718 
+
+FDR-corrected p-value is:
+0.1948718 
