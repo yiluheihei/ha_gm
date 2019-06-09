@@ -672,7 +672,7 @@ st3
 
 The following analysis inlcuding lefse OTU biomarker (using lefse) and functional prediction (usring picrust, lefse, and bugbase), is based on the taxa tables from qiime. Thus, we should convert the qiime taxa tables to the file that is compatible with lefse, picrust and bugbase.
 
-You should downloaded file 97_otus.fasta from https://gg-sg-web.s3-us-west-2.amazonaws.com/downloads/greengenes_database/gg_13_5/gg_13_5.fasta.gz before run the folling script, unzip it and put file 97_otus.fasta under directory `data/raw`.
+You should downloaded greegene database from ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_5_otus.tar.gz before run the folling script, unzip it and put file 97_otus.fasta under directory `data/raw`.
 
 ```{sh qiime2other, eval=FALSE}
 sh src/shell/qiime_to_lefse_picrust_bugbase.sh

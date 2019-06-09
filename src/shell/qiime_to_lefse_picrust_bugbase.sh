@@ -20,7 +20,7 @@ summarize_taxa.py -i data/processed/open_otu_28.biom \
 -o data/processed/summaryize_taxa_L6 -m data/raw/mapping_new.txt --delimiter '|'
 
 # qiime to picrust, 97_otus.fasta is the reference sequence of greengene database
-# you should downloaded it from https://gg-sg-web.s3-us-west-2.amazonaws.com/downloads/greengenes_database/gg_13_5/gg_13_5.fasta.gz
+# you should downloaded it from ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_5_otus.tar.gz
 filter_otus_from_otu_table.py -i data/processed/open_otu_28.biom \
 -o data/processed/closed_otu_28.biom --negate_ids_to_exclude -e data/raw/97_otus.fasta
 filter_otus_from_otu_table.py -i data/processed/closed_otu_28.biom \
