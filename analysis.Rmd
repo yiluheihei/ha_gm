@@ -42,6 +42,15 @@ library(treeio)
 library(circlize) # colorRamp2
 library(ggfortify) # pca
 library(ggsignif) # geom_signif
+
+# ecological network
+library(SpiecEasi)
+library(igraph)
+library(rsvg) # read svg
+library(grImport2) # read svg
+library(grid)
+library(furrr)
+library(writexl) # write table s6
 ```
 
 ```{r source_script}
@@ -55,13 +64,13 @@ sourceDir <- function(path, trace = TRUE, ...) {
 sourceDir("src/R/")
 ```
 
-# Effects of HA on core body temperature
+# Effects of HA on core body temperature and weight
 
 To confirm the protective role of HA, the rectal temperature (Tre), a higher, more reliable and more stable method to measure core body temperature, was assessed and compared between HA and CR subjects. **Supplementary Figure S1 shows** that the Tre profile of HA subjects significantly increased in response to the first and second weeks of heat exposure followed by a slow and stable change to a Tre that was significantly decreased to the same level as before exposure. 
 
-```{r tre, fig.width=5, fig.height=4, fig.cap="**Supplementary Figure S1.** Changes in rectal temperature during 28 days of heat exposure."}
+```{r tre, fig.width=8, fig.height=4, fig.cap="**Supplementary Figure S1.** Changes in rectal temperature during 28 days of heat exposure."}
 tre <- read_tsv("data/raw/tre.tsv")
-p_s1 <- ggplot(tre) +
+p_s1a <- ggplot(tre) +
   stat_summary(
     fun.y = "mean", aes(x = days, y = rt, color = state), 
     geom = "point", size = 3) +
@@ -77,7 +86,33 @@ p_s1 <- ggplot(tre) +
     labels = seq.int(0, 36, by = 2)
   ) +
   theme(legend.position = c(0.9, 0.8))
-# ggsave("output/figure/figure_s1.pdf", p_s1, width = 5, height = 4)
+
+weight <- read_tsv("data/raw/weight.tsv")
+p_s1b <- ggplot(weight) +
+  stat_summary(
+    fun.y = "mean", aes(x = days, y = weight, color = state), 
+    geom = "point", size = 3) +
+  stat_summary(fun.y = "mean", aes(x = days, y = weight, color = state), 
+    geom = "line") +
+  labs(x = "Days", y = "Body Weight (grams)") +
+  guides(color = guide_legend(title = NULL)) +
+  # scale_x_date(date_breaks = "2 day", date_labels = "%m/%d") +
+  theme_bw() +
+  scale_color_npg() +
+  scale_x_continuous(
+    breaks = seq.int(0, 35, by = 7),
+    labels = seq.int(0, 35, by = 7)
+  ) +
+  ylim(200, 400) +
+  scale_y_continuous(
+    breaks = seq.int(200, 400, by = 50),
+    labels = seq.int(200, 400, by = 50)
+  )  +
+  theme(legend.position = "none")
+
+p_s1 <- p_s1a + p_s1b + plot_layout(nrow = 1, width = c(1, 1)) + plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_s1.pdf", p_s1, width = 8, 
+  height = 4)
 p_s1
 ```
 
@@ -412,7 +447,7 @@ p_beta_bray_28 <- plot_ordination(ps_ev_28, pcoa_bray_28,
   scale_color_npg(labels = c(control = "CR", heat = "HA")) +
   theme(legend.title = element_blank(), legend.position = "none") +
   annotate("text",
-    label = "bold(Anosim)~~Bray~italic(P)==0.002~~Jaccard~italic(P)==0.004", 
+    label = "bold(Anosim)~~Bray~italic(P)==0.003~~Jaccard~italic(P)==0.003", 
     x=-0.18, y=-0.77, parse = TRUE, size = 3)
   # annotation_custom(ggplotGrob(p_pvalue_28), xmin = -0.75, 
   #  xmax = -0.4, ymin = 0.4)
@@ -428,7 +463,7 @@ p_beta_jaccard_28 <- plot_ordination(ps_ev_28, pcoa_jaccard_28,
   scale_color_npg(labels = c(control = "CR", heat = "HA")) +
   theme(legend.title = element_blank()) + 
   annotate("text",
-    label = "bold(MRPP)~~Bray~italic(P)==0.007~~Jaccard~italic(P)==0.008", 
+    label = "bold(MRPP)~~Bray~italic(P)==0.001~~Jaccard~italic(P)==0.005", 
     x=-0.2, y=-0.78, parse = TRUE, size = 3)
 ```
 ```{r figure1, fig.width=8, fig.height=7, fig.cap="**Figure 1.** Diversity analysis on day 28. (A) Alpha diversity assessed by richness (ACE, Observed), diversity (Shannon, Simpson). Boxes represent the interquartile ranges, and the inside black plots represent the median and circles are outliers. P values are from Wilcoxon rank sum test. Beta diversity assessed by Principal coordinate analysis (PCoA) based on the Bray-Curtis (B) and Jaccard (C) distances. Significant P-values of Anosim and multi-response permutation procedure (MRPP) between groups emphasize the differences in microbial community structure. P values: * P < 0.05, ** P < 0.01."}
@@ -472,9 +507,11 @@ p_mean_comosition <- subset_samples(top_phylum, Time == 28) %>%
 ```
 
 ```{r figres4,fig.width=8, fig.height=10, fig.cap="**Supplementary Figure S4.** Diversity analysis on day 14. (A) Alpha diversity assessed by richness (ACE, Observed), diversity (Shannon, Simpson). Boxes represent the interquartile ranges, and the inside black plots represent the median and circles are outliers. P values are from Wilcoxon rank sum test. Beta diversity assessed by Principal coordinate analysis (PCoA) based on the Bray-Curtis (B) and Jaccard (C) distances. Significant P-values of Anosim and multi-response permutation procedure (MRPP) between groups emphasize the differences in microbial community structure. (D) Relative abundance of bacterial phyla. P values: ng, no significance P > 0.05."}
-p_s4 <- p_alpha_14 + {p_beta_bray_14 + p_beta_jaccard_14 + plot_layout(ncol = 2)} +
+p_s4 <- p_alpha_14 + 
+  {p_beta_bray_14 + p_beta_jaccard_14 + plot_layout(ncol = 2)} + 
   p_mean_comosition + 
-  plot_layout(nrow = 3, heights = c(1.4, 1, 0.8)) + plot_annotation(tag_levels = "A")
+  plot_layout(nrow = 3, heights = c(1.4, 1, 0.8)) +
+  plot_annotation(tag_levels = "A")
 ggsave("output/figure/figure_s4.pdf", p_s4, width = 8, height = 10)
 p_s4
 ```
@@ -720,6 +757,15 @@ lefse_otu_marker <-
   arrange(desc(enrich_group), desc(lda))
 
 write_tsv(lefse_otu_marker, "output/lefse_qiime/table_s4.tsv")
+
+lefse_enrich <- 
+  read_tsv(
+    "output/lefse_qiime/lefse_qiime_out.res", 
+    col_names = c("otu", "mean_abd", "enrich_group", "lda", "p")
+  ) %>% 
+  filter(!is.na(enrich_group))
+write_tsv(lefse_enrich, "output/lefse_qiime/lefse_enriched.tsv", 
+  col_names = FALSE)
 lefse_otu_marker
 ```
 
@@ -744,7 +790,7 @@ biom convert -i output/picrust_kegg/metagenome_predictions.biom \
 -o output/picrust_kegg/metagenome_predictions.txt --to-tsv
 ```
 
-Overall, the microbial communities present in HA and CR could be distinguished based on their functions (Supplementary Figure S5A).
+Overall, the microbial communities present in HA and CR could be distinguished based on their functions (Figure S4A).
 
 ```{r, picrust_ko_pca}
 picrust_ko <- read_tsv(
@@ -758,7 +804,8 @@ subjects_name <- row.names(pca_in)
 pca_color <- tibble(name = subjects_name, 
   color = ifelse(grepl("^HA", subjects_name), "HA", "CR"))
 
-p_s5a <- autoplot(prcomp(pca_in), data = pca_color, colour = "color") + 
+p_f4a <- autoplot(prcomp(pca_in), 
+  data = pca_color, colour = "color") + 
   theme_bw() +
   scale_color_npg() +
   theme(legend.position = "none") 
@@ -790,7 +837,7 @@ picrust_kegg <- rbind(lefse_class, picrust_kegg)
 write_tsv(picrust_kegg, "output/picrust_kegg/lefse_kegg_in.txt", col_names = FALSE)
 ```
 
-The predicted KEGG pathway significantly enriched in HA included cell motility, signal transduction, lipid metabolism, metabolism of other amino acids, neurodegenerative diseases, environmental adaption and transport and catabolism (Supplementary Figure S5B, Supplementary Table S5). 
+The predicted KEGG pathway significantly enriched in HA included cell motility, signal transduction, lipid metabolism, metabolism of other amino acids, neurodegenerative diseases, environmental adaption and transport and catabolism (Figure 4C, Supplementary Table S5). 
 
 ```{sh picrust_kegg_pathway,eval=FALSE}
 format_input.py output/picrust_kegg/lefse_kegg_in.txt \
@@ -811,26 +858,19 @@ enrich_pathway <- filter(lefse_pathway, !is.na(enrich_group))
 # pathway ordered according to lda in different groups
 pathway_order <- arrange(enrich_pathway, 
   desc(enrich_group), desc(lda))$pathway
-p_s5b <- ggplot(enrich_pathway, aes(pathway, lda)) +
-    geom_segment(aes(xend = pathway, yend = 0, colour = enrich_group), size = 6) +
+p_f4c <- ggplot(enrich_pathway, aes(pathway, lda)) +
+  geom_segment(aes(xend = pathway, yend = 0, colour = enrich_group), size = 8) +
   theme_bw() +
   scale_color_npg() +
   labs(y = "LDA SCORE (log10)", x = "KEGG pathway") +
   guides(colour = guide_legend(title = NULL)) +
-  theme(legend.position = "top") +
+  theme(legend.position = c(0.8, 0.87), legend.direction = "horizontal",
+    axis.text.x = element_text(angle = -90, hjust = 0)) +
   scale_x_discrete(limits = pathway_order) +
-  coord_flip()
+  scale_y_continuous(expand = c(0, 0))
 ```
 
-Supplementary Figure S5
-
-```{r figures5, fig.width=12,fig.height=5,fig.cap="**Supplementary Figure S5.** **(A)** Principal component analysis (PCA) plot comparing the metagenome predictions for KO using PICRUSt of the microbiota of HA and CR subjects. **(B)** Predicted KEGG Pathways differentially abundant between HA and CR subjects."}
-p_s5 <- p_s5a + p_s5b + 
-  plot_layout(ncol = 2) +
-  plot_annotation(tag_levels = "A")
-ggsave("output/figure/figure_s5.pdf", p_s5, width = 12, height = 5)
-p_s5
-```
+pathway enrichment analysis using lefse
 
 ```{r st5}
 lefse_pathway_marker <- 
@@ -869,9 +909,10 @@ run.bugbase.r -i data/processed/bugbase_json.biom  \
 -o output/bugbase/bugbase_output_class_T0.001 -T 0.001 -t 3
 ```
 
-Among all the phenotypes, the relative abundance of the Aerobic was significantly increased  and the stress tolerant was significantly decreased after HA (Figure 4).
+Among all the phenotypes, the relative abundance of the Aerobic was significantly increased  and the stress tolerant was significantly decreased after HA (Figure 4B).
 
-```{r bugbase-phenotype, fig.width=5,fig.height=4,fig.cap="**Figure 4.** Phenotypic prediction based on BugBase analysis. BugBase is a bioinformatics tool that infers community-wide phenotypes, and predict phenotypic differences from 16S rRNA sequence data. Among all the phenotypes, the relative abundance of the Aerobic was significantly increased and the stress tolerant was significantly decreased after HA subjects. Statistical significance was determined by Pairwise Wilcoxon tests. FDR-corrected pairwise P value ranges are: * P < 0.05."}
+
+```{r bugbase-phenotype}
 bugbase_predictions <- read_tsv(
   "output/bugbase/bugbase_output_class_T0.001/predicted_phenotypes/predictions.txt"
 ) 
@@ -937,39 +978,257 @@ p_bugbase <- ggplot(bugbase_signf, aes(x = Treatment, y = value, fill = Treatmen
   theme_bw() + 
   labs(x = NULL, y = "Relative abundance") +
   theme(legend.position = "none")
-ggsave("output/bugbase/figure_4.pdf", p_bugbase, width = 5, height = 4)
-p_bugbase
+# ggsave("output/bugbase/figure_4.pdf", p_bugbase, width = 5, height = 4)
+# p_bugbase
+# 
+# {p_s5a + p_bugbase + plot_layout(ncol = 2)} + p_s5b
 ```
 
-
+```{r figure4, fig.width=6,fig.height=8,fig.cap="**Figure 4.** Functional analysis on day 28. (A) Principal component analysis (PCA) plot comparing the KEGG ontology (KO) between HA and CR subjects. KO was predicted using PICRUSt. (B) Phenotypic prediction using BugBase. Among all the phenotypes, the relative abundance of the aerobic was significantly increased and the stress tolerant was significantly decreased after HA subjects. Statistical significance was determined by Wilcoxon rank sum tests with FDR correction. P value: * P < 0.05. (C) Predicted KEGG Pathways differentially abundant between HA and CR subjects."}
+p_f4 <- p_f4a + p_bugbase - p_f4c + plot_layout(ncol = 1, heights = c(1, 1)) +
+  plot_annotation(tag_levels = "A")
+ggsave("output/figure/figure_4.pdf", p_f4, width = 6, height = 8)
+p_f4
+```
 
 
 ```{r mapping_new}
-mapping <- read_tsv("data/raw/mapping.txt")
-selected_reads_sample_name <- mapping$InputFileName %>%
-  tools::file_path_sans_ext()
-selected_reads_file_name <- paste0(selected_reads_sample_name, ".fna")
+# mapping <- read_tsv("data/raw/mapping.txt")
+# selected_reads_sample_name <- mapping$InputFileName %>%
+#   tools::file_path_sans_ext()
+# selected_reads_file_name <- paste0(selected_reads_sample_name, ".fna")
+# 
+# reads_path <- "/P101SC18030731-01-B8-3_result/01.CleanData"
+# # reads_sample_name <- list.dirs(reads_path, full.names = FALSE, recursive = FALSE)
+# selected_reads_file <- file.path(
+#   reads_path,
+#   selected_reads_sample_name,
+#   selected_reads_file_name
+# )
+# reads_file_to <- file.path(
+#   "data/raw/reads",
+#   map_chr(
+#     selected_reads_file_name,
+#     ~ ifelse(str_detect(.x, "^HA"), # sample name transform
+#       str_replace(.x, "^HA", "CR"),
+#       str_replace(.x, "^CR", "HA")
+#     )
+#   )
+# )
+# # file.copy(selected_reads_file, reads_file_to)
+# mapping$InputFileName <- basename(reads_file_to)
+# # write_tsv(mapping, "data/raw/mapping_new.txt")
+```
 
-reads_path <- "/Volumes/数据备份/诺禾致源结果/16S/第二阶段/P101SC18030731-01-B8-3_result/01.CleanData"
-# reads_sample_name <- list.dirs(reads_path, full.names = FALSE, recursive = FALSE)
-selected_reads_file <- file.path(
-  reads_path,
-  selected_reads_sample_name,
-  selected_reads_file_name
-)
-reads_file_to <- file.path(
-  "data/raw/reads",
-  map_chr(
-    selected_reads_file_name,
-    ~ ifelse(str_detect(.x, "^HA"), # sample name transform
-      str_replace(.x, "^HA", "CR"),
-      str_replace(.x, "^CR", "HA")
-    )
-  )
-)
-# file.copy(selected_reads_file, reads_file_to)
-mapping$InputFileName <- basename(reads_file_to)
-# write_tsv(mapping, "data/raw/mapping_new.txt")
+## HA harbors a modified microbial ecological network
+
+To examine the changes on HA microbial community structure and how HA affects the microbial interactions, we utilized SPIEC-EASI33 to infer two microbial ecological networks of HA and CR subjects. In general, there were more positive correlations than negative correlations in both ecological networks.
+
+```{r ecological_network}
+# To minimize the interference of low confidence OTUs, OTUs that were less than 100 reads over all samples or present in less 30% of the samples were filter out. 
+ps_28 <- subset_samples(ps_big, Time == 28)
+otu <- otu_table(ps_28)
+otu <- otu[rowSums(otu > 0) > 5, ]
+otu <- otu[rowSums(otu) > 100, ]
+otu_table(ps_28) <- otu
+
+ps_ha28 <- subset_samples(ps_28, Treatment == "HA")
+ps_cr28 <- subset_samples(ps_28, Treatment == "CR")
+
+cor_ha28 <- spiec.easi(ps_ha28, method='mb', lambda.min.ratio=1e-2, nlambda=10,
+  icov.select.params=list(rep.num=100, ncores=2))
+net_ha28 <- make_net(ps_ha28, cor_ha28)
+
+cor_cr28 <- spiec.easi(ps_cr28, method='mb', lambda.min.ratio=1e-2, nlambda=10,
+  icov.select.params=list(rep.num=100, ncores=2))
+net_cr28 <- make_net(ps_cr28, cor_cr28)
 ```
 
 
+The degree distributions of the vertices were similar in the two networks (Figure 5C).
+
+```{r degree_distribution}
+dd_ha28 <- degree_distribution(net_ha28, cumulative = FALSE)
+dd_cr28 <- degree_distribution(net_cr28, cumulative = FALSE)
+
+n_dd_ha28 <- length(dd_ha28)
+n_dd_cr28 <- length(dd_cr28)
+dd_tibble <- tibble(
+  x = c(0:(n_dd_ha28 - 1), 0:(n_dd_cr28 - 1)),
+  y = c(dd_ha28, dd_cr28),
+  state = rep(c("HA", "CR"), c(n_dd_ha28, n_dd_cr28))
+)
+
+p_dd <- ggplot(dd_tibble, aes(x, y, color = state)) +
+  geom_point() + 
+  geom_line() +
+  theme_bw() +
+  scale_color_npg() +
+  labs(x = "Degree", y = "Frequency") +
+  theme(legend.title = element_blank(), legend.position = c(0.87, 0.87)) 
+```
+
+We then estimated the natural connectivity, a general metric to measure robustness of network against attacks by sequentially removing hubs (nodes with high degree centrality). The HA network was more robust than the CR network by removing high degree nodes. (Fig. 5D)
+
+```{r natural_connectivity}
+nc_ha28_degree <- nc_attack(net_ha28,method = "degree")
+nc_cr28_degree <- nc_attack(net_cr28, method = "degree")
+nc_tibble <- bind_rows(
+  make_nc_tibble(nc_ha28_degree, "HA", "degree"),
+  make_nc_tibble(nc_cr28_degree, "CR", "degree"),
+)
+p_nc <- ggplot(nc_tibble, aes(x, y, color = state)) +
+  geom_line() +
+  theme_bw() + 
+  scale_color_npg() +
+  theme(legend.position = c(0.87, 0.87), legend.title = element_blank()) +
+  labs(x = "Percentage of removed nodes", y = "Natural connectivity") 
+```
+
+In general, there were more positive correlations than negative correlations in both ecological networks (Fig. 5A,B, Supplementary Table S6).
+ 
+```{r figure_5, fig.width=8, fig.height=8, fig.cap="**Figure 5.** Ecological networks inferred using SPIEC-EASI in HA (A) and CR (B) group. Nodes represents OTUs and colored by its phylum; red edges represent positive correlations and green edges represent negative correlations. (C) Degree distributions of the two networks are similar. (D) Natural Connectivity was used to measure the robustness of networks by sequentially removing high degree nodes. The result showed that HA network was more robust than CR network."}
+# import svg
+rsvg_svg("data/net_cytoscape/ha28.svg", "data/net_cytoscape/ha28_cairo.svg")
+rsvg_svg("data/net_cytoscape/cr28.svg", "data/net_cytoscape/cr28_cairo.svg")
+
+ha_picture <- grImport2::readPicture("data/net_cytoscape/ha28_cairo.svg")
+cr_picture <- grImport2::readPicture("data/net_cytoscape/cr28_cairo.svg")
+
+# legend
+cols <- ggsci::pal_npg(palette = c("nrc"), alpha = 1)(10) %>% 
+  stringr::str_sub(1, 7) %>% 
+  rev
+
+phylums <- unique(vertex_attr(net_ha28, "Phylum"))
+phylums <- c(setdiff(phylums, "Unclassified"), "Unclassified") 
+
+lgd <- ComplexHeatmap::Legend(at = sort(phylums), title = "Phylum",
+  title_position = "leftcenter",
+  legend_gp = gpar(fill = cols),
+  direction = "horizontal",
+  nrow = 2
+)
+
+# generate figure 5
+generate_figure5 <- function(ha_picture, cr_picture, legend, p_dd, p_nc) {
+  tag_text <- textGrob("A", gp = gpar(cex = 1.2))
+  grid.newpage()
+  g_lay <- grid.layout(5,4, 
+    widths = unit.c(
+      unit(1.5, "grobwidth", tag_text), unit(1, "null"),
+      unit(1.5, "grobwidth", tag_text), unit(1, "null")), 
+    heights = unit.c(
+      unit(1.5, "grobheight", tag_text),
+      unit(1, "null"),
+      unit(5, "grobheight", tag_text),
+      unit(1.5, "grobheight", tag_text), 
+      unit(1, "null")
+    )
+  )
+  pushViewport(viewport(layout = g_lay))
+
+  pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 1, name = "tag_1"))
+  grid.text("A", gp = gpar(cex = 1.2))
+  upViewport()
+  
+  pushViewport(viewport(layout.pos.row = 2, layout.pos.col = c(1,2), name = "ha_net"))
+  grImport2::grid.picture(ha_picture, expansion = 0, ext = "clipbbox", width = unit(1, "npc"))
+  upViewport()
+  
+  pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 3, name = "tag_2"))
+  grid.text("B", gp = gpar(cex = 1.2))
+  upViewport()
+
+  pushViewport(viewport(layout.pos.row = 2, layout.pos.col = c(3,4), name = "cr_net"))
+  grImport2::grid.picture(cr_picture, expansion = 0, ext = "clipbbox", width = unit(1, "npc"))
+  upViewport()
+  
+  pushViewport(viewport(layout.pos.row = 3, name = "legend"))
+  draw(lgd)
+  upViewport()
+
+  pushViewport(viewport(layout.pos.row = 4, layout.pos.col = 1, name = "tag_3"))
+  grid.text("C", gp = gpar(cex = 1.2))
+  upViewport()
+  
+  pushViewport(viewport(layout.pos.row = 4, layout.pos.col = 3, name = "tag_4"))
+  grid.text("D", gp = gpar(cex = 1.2))
+  upViewport()
+
+  pushViewport(viewport(layout.pos.row = 5, layout.pos.col = c(1,2), name = "degree"))
+  grid.draw(ggplotGrob(p_dd))
+  upViewport()
+  
+  pushViewport(viewport(layout.pos.row = 5, layout.pos.col = c(3,4), name = "robust"))
+  grid.draw(ggplotGrob(p_nc))
+}
+generate_figure5(ha_picture, cr_picture, lgd, p_dd, p_nc)
+
+pdf("output/figure/figure_f5.pdf", height = 8, width = 8)
+generate_figure5(ha_picture, cr_picture, lgd, p_dd, p_nc)
+dev.off()
+```
+
+Supplementary Table S6
+
+```{r table_s6}
+edge_ha28 <- igraph::as_data_frame(net_ha28)
+vertex_ha28 <- igraph::as_data_frame(net_ha28, "vertices")
+
+edge_ha28$from_genus <- vertex_ha28$Genus[match(edge_ha28[, 1], vertex_ha28$name)]
+edge_ha28$to_genus <- vertex_ha28$Genus[match(edge_ha28[, 2], vertex_ha28$name)]
+
+edge_ha28$color <- NULL
+edge_ha28 <- dplyr::rename(edge_ha28, `spiec-easi correlation` = weight) %>% 
+  mutate( 
+    from_genus = ifelse(from_genus != "g__", from_genus, NA),
+    to_genus = ifelse(to_genus != "g__", to_genus, NA),
+    type = ifelse( `spiec-easi correlation` > 0, "positive", "negative")) %>% 
+  mutate(`intra genus` = ifelse(from_genus == to_genus, "true", "false"))
+edge_ha_intra_genus <- filter(edge_ha28, from_genus == to_genus)
+edge_ha_inter_genus <- filter(edge_ha28, from_genus != to_genus)
+  
+edge_cr28 <- igraph::as_data_frame(net_cr28)
+vertex_cr28 <- igraph::as_data_frame(net_cr28, "vertices")
+edge_cr28$from_genus <- vertex_cr28$Genus[match(edge_cr28[, 1], vertex_cr28$name)]
+edge_cr28$to_genus <- vertex_cr28$Genus[match(edge_cr28[, 2], vertex_cr28$name)]
+
+edge_cr28$color <- NULL
+edge_cr28 <- dplyr::rename(edge_cr28, `spiec-easi correlation` = weight) %>% 
+  mutate( 
+    from_genus = ifelse(from_genus != "g__", from_genus, NA),
+    to_genus = ifelse(to_genus != "g__", to_genus, NA),
+    type = ifelse( `spiec-easi correlation` > 0, "positive", "negative")) %>% 
+  mutate(`intra genus` = ifelse(from_genus == to_genus, "true", "false"))
+
+write_xlsx(list(`HA network` = edge_ha28, `CR network` = edge_cr28), 
+  path = "output/table/table_s6.xlsx")
+```
+
+ We then compared the degrees of OTUs in the four significantly different genera Blautia, Oscillospira, Lactobacillus, Allobaculum. The degree of Lactobacillus in HA network was significantly lower than in CR network (P = 0.0396, Wilcoxon sum test, FDR corrected), while degrees of OTUs in other three genera were similar in the two networks (Supplementary Fig. S5).
+ 
+```{r degree_different_genera, fig.width=7, fig.height=4, fig.cap="**Figure S5.** The degrees of OTUs in the four significant different genera of inferred ecological networks. P values are from Wilcoxon rank sum test. P value: * P < 0.05; ns, no significance P > 0.05."}
+degree_cr28 <- igraph::degree(net_cr28, normalized = TRUE)
+degree_ha28 <- igraph::degree(net_ha28, normalized = TRUE)
+degree_df <- tibble(
+  degree = c(degree_cr28, degree_ha28),
+  genus = c(vertex_cr28$Genus, vertex_ha28$Genus),
+  state = rep(c("CR", 'HA'), each = length(degree_cr28))
+)
+
+marker_genus <- filter(degree_df, genus %in%
+    c("g__Blautia", "g__Oscillospira", "g__Lactobacillus", "g__Allobaculum")
+)
+p_s5 <- ggplot(marker_genus, aes(state, degree, fill = state)) +
+  geom_boxplot() +
+  facet_wrap(~genus, ncol = 4) +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("CR", "HA")), label = "p.signif") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_fill_npg() +
+  labs(x = NULL, y = "Degree")
+p_s5
+ggsave("output/figure/figure_s5.pdf", p_s5, width = 7, height = 4)
+```
