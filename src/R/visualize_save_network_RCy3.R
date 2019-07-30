@@ -13,9 +13,13 @@ net_cr28 <- set_vertex_attr(net_cr28, "Phylum", value = phylum_cr)
 
 createNetworkFromIgraph(net_ha28,"ha28")
 createNetworkFromIgraph(net_cr28, "cr28")
+
+# no node and edge labels by default
+setEdgeLabelDefault("", "Solid")
+setNodeLabelDefault("", "Solid")
+
 setVisualStyle("Solid", "ha28")
 setVisualStyle("Solid", "cr28")
-setEdgeLabelDefault(NA, "Solid")
 
 # set node color according to phylum
 cols <- ggsci::pal_npg(palette = c("nrc"), alpha = 1)(10) %>% 
@@ -68,6 +72,18 @@ net_scale <- min(
 setNetworkPropertyBypass(net_scale, "NETWORK_SCALE_FACTOR", network = "ha28")
 setNetworkPropertyBypass(net_scale, "NETWORK_SCALE_FACTOR", network = "cr28")
 
+# remove mapping edges label
+# cyrestDELETE(paste("styles", "Solid", "mappings", "EDGE_LABEL", sep="/"))
+# cyrestDELETE(paste("styles", "Solid", "mappings", "NODE_LABEL", sep="/")
+)
+
 # remove the labels of nodes and edges using cytoscape, then export to svg
-# don't know how to remove the labels of nodes and edges using RCy3 ?
 # exportImage("output/net_cytoscape/ha28", type = "SVG", network = "ha28")
+# exportImage("output/net_cytoscape/cr28", type = "SVG", network = "cr28")
+
+
+
+
+
+
+
