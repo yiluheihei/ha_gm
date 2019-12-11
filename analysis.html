@@ -286,11 +286,15 @@ library(grid)
 library(furrr)
 library(writexl) # write table s6</code></pre>
 <pre class="r"><code>sourceDir &lt;- function(path, trace = TRUE, ...) {
-    for (nm in list.files(path, pattern = &quot;[.][RrSsQq]$&quot;)) {
-       if (trace) cat(nm,&quot;:&quot;)
-       source(file.path(path, nm), ...)
-       if (trace) cat(&quot;\n&quot;)
+  for (nm in list.files(path, pattern = &quot;[.][RrSsQq]$&quot;)) {
+    if (!grepl(&quot;visualize_save_network&quot;, nm, fixed = TRUE)) {
+      if (trace) cat(nm,&quot;:&quot;)      
+      source(file.path(path, nm), ...)
+      if (trace) cat(&quot;\n&quot;)
+    } else {
+      message(&quot;Do not source visualize_save_network_RCy3.R&quot;)
     }
+  }
 }
 sourceDir(&quot;src/R/&quot;)</code></pre>
 <pre><code>## compare_groups.R :
@@ -517,11 +521,11 @@ pvalue_0 &lt;- compare_groups(ps_0)
 pvalue_0</code></pre>
 <pre><code>## $Anosim
 ##    bray jaccard 
-##   0.035   0.047 
+##   0.051   0.049 
 ## 
 ## $MRPP
 ##    bray jaccard 
-##   0.051   0.075</code></pre>
+##   0.069   0.061</code></pre>
 <p>Beta diversity</p>
 <pre class="r"><code>min_reads_0 &lt;- min(sample_sums(ps_0))
 ps_ev_0 = transform_sample_counts(ps_0, 
@@ -586,11 +590,11 @@ pvalue_14 &lt;- compare_groups(ps_14)
 pvalue_14</code></pre>
 <pre><code>## $Anosim
 ##    bray jaccard 
-##   0.553   0.586 
+##   0.541   0.575 
 ## 
 ## $MRPP
 ##    bray jaccard 
-##   0.541   0.514</code></pre>
+##   0.538   0.485</code></pre>
 <p>Beta diverisy</p>
 <pre class="r"><code>min_reads_14 &lt;- min(sample_sums(ps_14))
 ps_ev_14 = transform_sample_counts(ps_14, 
@@ -645,11 +649,11 @@ pvalue_28 &lt;- compare_groups(ps_28)
 pvalue_28</code></pre>
 <pre><code>## $Anosim
 ##    bray jaccard 
-##   0.001   0.005 
+##   0.002   0.002 
 ## 
 ## $MRPP
 ##    bray jaccard 
-##   0.001   0.004</code></pre>
+##   0.002   0.002</code></pre>
 <pre class="r"><code>min_reads &lt;- min(sample_sums(ps_28))
 ps_ev_28 = transform_sample_counts(ps_28, function(x) min_reads * x/sum(x))
 
@@ -1242,16 +1246,16 @@ p_dd &lt;- ggplot(dd_tibble, aes(x, y, color = state)) +
 <p>We then estimated the natural connectivity, a general metric to measure robustness of network against attacks by sequentially removing hubs (nodes with high degree centrality). The HA network was more robust than the CR network by removing high degree nodes. (Fig. 5D)</p>
 <pre class="r"><code>nc_ha28_degree &lt;- nc_attack(net_ha28,method = &quot;degree&quot;)</code></pre>
 <pre><code>## 
- Progress: ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────        100%
- Progress: ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────       100%
- Progress: ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────      100%
- Progress: ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────    100%
- Progress: ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 100%</code></pre>
+ Progress: ───────────────────────────────────────────────────────────────────────────      100%
+ Progress: ────────────────────────────────────────────────────────────────────────────     100%
+ Progress: ─────────────────────────────────────────────────────────────────────────────    100%
+ Progress: ───────────────────────────────────────────────────────────────────────────────  100%
+ Progress: ──────────────────────────────────────────────────────────────────────────────── 100%</code></pre>
 <pre class="r"><code>nc_cr28_degree &lt;- nc_attack(net_cr28, method = &quot;degree&quot;)</code></pre>
 <pre><code>## 
- Progress: ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────     100%
- Progress: ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  100%
- Progress: ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 100%</code></pre>
+ Progress: ─────────────────────────────────────────────────────────────────────────────    100%
+ Progress: ───────────────────────────────────────────────────────────────────────────────  100%
+ Progress: ──────────────────────────────────────────────────────────────────────────────── 100%</code></pre>
 <pre class="r"><code>nc_tibble &lt;- bind_rows(
   make_nc_tibble(nc_ha28_degree, &quot;HA&quot;, &quot;degree&quot;),
   make_nc_tibble(nc_cr28_degree, &quot;CR&quot;, &quot;degree&quot;),

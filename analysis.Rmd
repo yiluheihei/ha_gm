@@ -55,11 +55,15 @@ library(writexl) # write table s6
 
 ```{r source_script}
 sourceDir <- function(path, trace = TRUE, ...) {
-    for (nm in list.files(path, pattern = "[.][RrSsQq]$")) {
-       if (trace) cat(nm,":")
-       source(file.path(path, nm), ...)
-       if (trace) cat("\n")
+  for (nm in list.files(path, pattern = "[.][RrSsQq]$")) {
+    if (!grepl("visualize_save_network", nm, fixed = TRUE)) {
+      if (trace) cat(nm,":")      
+      source(file.path(path, nm), ...)
+      if (trace) cat("\n")
+    } else {
+      message("Do not source visualize_save_network_RCy3.R")
     }
+  }
 }
 sourceDir("src/R/")
 ```
