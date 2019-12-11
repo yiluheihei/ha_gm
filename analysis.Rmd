@@ -1,7 +1,7 @@
 ---
 title: "The effect of heat acclimation on gut microbiota"
 author: "Yang"
-date: "2019/6/4"
+date: "2019/12/11"
 output: 
   html_document:
     toc: true
@@ -1236,4 +1236,10 @@ p_s5 <- ggplot(marker_genus, aes(state, degree, fill = state)) +
   labs(x = NULL, y = "Degree")
 p_s5
 ggsave("output/figure/figure_s5.pdf", p_s5, width = 7, height = 4)
+```
+
+## SessionInfo
+
+```{r sessioninfo}
+sessionInfo()
 ```
