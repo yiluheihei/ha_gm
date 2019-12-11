@@ -989,9 +989,10 @@ p_bugbase <- ggplot(bugbase_signf, aes(x = Treatment, y = value, fill = Treatmen
 ```
 
 ```{r figure4, fig.width=6,fig.height=8,fig.cap="**Figure 4.** Functional analysis on day 28. (A) Principal component analysis (PCA) plot comparing the KEGG ontology (KO) between HA and CR subjects. KO was predicted using PICRUSt. (B) Phenotypic prediction using BugBase. Among all the phenotypes, the relative abundance of the aerobic was significantly increased and the stress tolerant was significantly decreased after HA subjects. Statistical significance was determined by Wilcoxon rank sum tests with FDR correction. P value: * P < 0.05. (C) Predicted KEGG Pathways differentially abundant between HA and CR subjects."}
-p_f4 <- p_f4a + p_bugbase - p_f4c + plot_layout(ncol = 1, heights = c(1, 1)) +
+p_f4 <- (p_f4a + p_bugbase + plot_layout(nrow = 1, widths = c(0.8, 1))) -
+  p_f4c + plot_layout(ncol = 1, heights = c(1, 1)) +
   plot_annotation(tag_levels = "A")
-ggsave("output/figure/figure_4.pdf", p_f4, width = 6, height = 8)
+ggsave("output/figure/figure_4.pdf", p_f4, width = 6.5, height = 8)
 p_f4
 ```
 
