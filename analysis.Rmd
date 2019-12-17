@@ -584,6 +584,36 @@ write_csv(diff_genus, "output/table/table_s2.csv")
 diff_genus
 ```
 
+差异属的比值热图 
+
+```{r sig-genus-heatmap}
+sig_diff_genus <- filter(genus_p, 
+  Genus %in% paste0("g__", c("Lactobacillus", "Oscillospira", "Blautia", 
+    "Allobaculum", "Prevotella"))
+)
+
+# sig_diff_genus <- filter(genus_p, p_value < 0.05)
+sig_genus <- bind_cols(map(sig_diff_genus$abdlist, unlist))
+names(sig_genus) <- as.character(sig_diff_genus$Genus)
+
+row.names(sig_genus) <- c(paste("C_", 1:8), paste("H_", 1:8))
+sig_genus2 <- t(sig_genus)
+sig_mean_c <- sig_genus2[, 1:8] %>% rowMeans()
+sig_mean_h <- sig_genus2[, 9:16] %>% rowMeans()
+sig_genus_fc1 <- sweep(sig_genus2[, 1:8], 1, sig_mean_h, FUN = "/")
+sig_genus_fc2 <- sweep(sig_genus2[, 9:16], 1, sig_mean_c, FUN = "/")
+sig_genus_fc <- cbind(sig_genus_fc1, sig_genus_fc2)
+
+Heatmap(sig_genus_fc %>% log2, 
+  col = c("steelblue", "#EEEEEE", "red"),
+    #col = circlize::colorRamp2(c(-5, 0, 5), c("blue", "white", "red")),
+    heatmap_legend_param = list(
+      title = "Z score",
+      title_position = "lefttop-rot"
+))
+
+```
+
 The genera abundance distribution was quite discrepant to that of CRs (Figure 2C). 
 
 ```{r figure2c, fig.width=6, fig.height=6, fig.cap="**Figure 2C.** Heatmap tree shows genera significantly different in HA compare to those in CR group, and their phylogenic relationships on day 28. The Abundance profiles are expressed by z-scores."}
