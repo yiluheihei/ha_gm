@@ -84,7 +84,7 @@ p_s1a <- ggplot(tre) +
   guides(color = guide_legend(title = NULL)) +
   # scale_x_date(date_breaks = "2 day", date_labels = "%m/%d") +
   theme_bw() +
-  scale_color_npg() +
+  scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
   scale_x_continuous(
     breaks = seq.int(0, 36, by = 2),
     labels = seq.int(0, 36, by = 2)
@@ -102,7 +102,7 @@ p_s1b <- ggplot(weight) +
   guides(color = guide_legend(title = NULL)) +
   # scale_x_date(date_breaks = "2 day", date_labels = "%m/%d") +
   theme_bw() +
-  scale_color_npg() +
+  scale_color_manual(values = c("#4DBBD5FF", "#E64B35FF")) +
   scale_x_continuous(
     breaks = seq.int(0, 35, by = 7),
     labels = seq.int(0, 35, by = 7)
@@ -219,10 +219,10 @@ p_s2a <- ggplot(otu_number_df, aes(treatment, otus_number, fill = treatment)) +
   theme(legend.position = "none") +
   expand_limits(y = c(250, 1150)) +
   stat_compare_means(comparisons = list(c("CR", "HA")), label = "p.signif", tip.length = 0, label.y = 1100) +
-  scale_fill_npg()
+  scale_fill_manual(values = c("#4DBBD5FF", "#E64B35FF"))
 ```
 ```{r otu_venn}
-npg_colors_2 <- ggsci::pal_npg("nrc")(2)
+npg_colors_2 <- ggsci::pal_npg("nrc")(2) %>% rev()
 ps_0 <- subset_samples(ps_big, Time == 0) %>% 
   prune_taxa(taxa_sums(.) > 0, .)
 p_s2c <- generate_venn_diagram(ps_0) %>% 
@@ -288,7 +288,7 @@ p_alpha_0 <- ggplot(alpha_df_0, aes(Treatment, value, fill = Treatment)) +
   facet_wrap(~index, scales = "free_y", nrow = 1) + 
   theme_bw() +
   theme(legend.position = "none") +
-  scale_fill_npg() +
+  scale_fill_manual(values = npg_colors_2) +
   stat_compare_means(comparisons = list(c("CR", "HA")), 
     label = "p.signif", tip.length = 0) +
   # scale_x_discrete(labels = c("HA","control" = "CR")) +
@@ -315,7 +315,7 @@ p_beta_bray_0 <- plot_ordination(ps_ev_0, pcoa_bray_0,
   color = "Treatment") + 
   geom_point(size = 2) +
   theme_bw() + 
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank(), legend.position = "none")
   # annotate("text",
   #   label = "bold(Anosim)~~Bray~italic(P)==0.46~~Jaccard~italic(P)==0.49", 
@@ -329,8 +329,7 @@ p_beta_jaccard_0 <- plot_ordination(ps_ev_0, pcoa_jaccard_0,
   # stat_ellipse(level = 0.95) +
   # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
   theme_bw() +
-  scale_color_npg() +
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank())
   # annotate("text",
   #   label = "bold(MRPP)~~Bray~italic(P)==0.377~~Jaccard~italic(P)==0.368", 
@@ -358,7 +357,7 @@ p_alpha_14 <- ggplot(alpha_df_14, aes(Treatment, value, fill = Treatment)) +
   facet_wrap(~index, scales = "free_y", nrow = 1) + 
   theme_bw() +
   theme(legend.position = "none") +
-  scale_fill_npg() +
+  scale_fill_manual(values = npg_colors_2) +
   stat_compare_means(comparisons = list(c("CR", "HA")), 
     label = "p.signif", tip.length = 0) +
   # scale_x_discrete(labels = c("HA","control" = "CR")) +
@@ -385,7 +384,7 @@ p_beta_bray_14 <- plot_ordination(ps_ev_14, pcoa_bray_14,
   color = "Treatment") + 
   geom_point(size = 2) +
   theme_bw() + 
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank(), legend.position = "none")
   # annotate("text",
   #   label = "bold(Anosim)~~Bray~italic(P)==0.46~~Jaccard~italic(P)==0.49", 
@@ -399,8 +398,7 @@ p_beta_jaccard_14 <- plot_ordination(ps_ev_14, pcoa_jaccard_14,
   # stat_ellipse(level = 0.95) +
   # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
   theme_bw() +
-  scale_color_npg() +
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank())
   # annotate("text",
   #   label = "bold(MRPP)~~Bray~italic(P)==0.377~~Jaccard~italic(P)==0.368", 
@@ -421,7 +419,7 @@ p_alpha_28 <- ggplot(alpha_df_28, aes(Treatment, value, fill = Treatment)) +
   facet_wrap(~index, scales = "free_y", nrow = 1) + 
   theme_bw() +
   theme(legend.position = "none") +
-  scale_fill_npg() +
+  scale_fill_manual(values = npg_colors_2) +
   stat_compare_means(comparisons = list(c("CR", "HA")), 
     label = "p.signif", tip.length = 0) +
   scale_x_discrete(labels = c("heat" = "HA","control" = "CR")) +
@@ -448,7 +446,7 @@ p_beta_bray_28 <- plot_ordination(ps_ev_28, pcoa_bray_28,
   stat_ellipse(level = 0.95) + 
   # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) + 
   theme_bw() + 
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank(), legend.position = "none") +
   annotate("text",
     label = "bold(Anosim)~~Bray~italic(P)==0.003~~Jaccard~italic(P)==0.003", 
@@ -463,8 +461,7 @@ p_beta_jaccard_28 <- plot_ordination(ps_ev_28, pcoa_jaccard_28,
   stat_ellipse(level = 0.95) +
   # geom_text(aes(label = X.SampleID), nudge_x = 0.1, nudge_y = 0.001) +
   theme_bw() +
-  scale_color_npg() +
-  scale_color_npg(labels = c(control = "CR", heat = "HA")) +
+  scale_color_manual(labels = c(control = "CR", heat = "HA"), values = npg_colors_2) +
   theme(legend.title = element_blank()) + 
   annotate("text",
     label = "bold(MRPP)~~Bray~italic(P)==0.001~~Jaccard~italic(P)==0.005", 
@@ -651,7 +648,7 @@ ht_df <- data.frame(CR = cr_zmean, HA = ha_zmean)
 p_heatmap_tree <- gheatmap(p_tree_phylum, ht_df, color = NULL, font.size = 2.5,
   colnames_position = "top",
   hjust = 0.4, width = 0.3) +
-  scale_fill_gradient2(low="blue", mid = "#EEEEEE", high = "red", 
+  scale_fill_gradient2(low="steelblue", mid = "#EEEEEE", high = "red", 
     breaks = c(-1, -0.5, 0, 0.5, 1), labels = c(-1, -0.5, 0, 0.5, 1)) +
   guides(color = FALSE) +
   # theme(legend.title = element_text(vjust = 0)) +
@@ -841,7 +838,7 @@ pca_color <- tibble(name = subjects_name,
 p_f4a <- autoplot(prcomp(pca_in), 
   data = pca_color, colour = "color") + 
   theme_bw() +
-  scale_color_npg() +
+  scale_color_manual(values = npg_colors_2) +
   theme(legend.position = "none") 
 ```
 
@@ -895,7 +892,7 @@ pathway_order <- arrange(enrich_pathway,
 p_f4c <- ggplot(enrich_pathway, aes(pathway, lda)) +
   geom_segment(aes(xend = pathway, yend = 0, colour = enrich_group), size = 8) +
   theme_bw() +
-  scale_color_npg() +
+  scale_color_manual(values = npg_colors_2) +
   labs(y = "LDA SCORE (log10)", x = "KEGG pathway") +
   guides(colour = guide_legend(title = NULL)) +
   theme(legend.position = c(0.8, 0.87), legend.direction = "horizontal",
@@ -1008,7 +1005,7 @@ p_bugbase <- ggplot(bugbase_signf, aes(x = Treatment, y = value, fill = Treatmen
   ) + 
   geom_blank(data = my_limits_df, aes(Treatment, value)) +
   facet_wrap(~phenotype, scales = "free_y") +
-  scale_fill_npg() +
+  scale_fill_manual(values = npg_colors_2) +
   theme_bw() + 
   labs(x = NULL, y = "Relative abundance") +
   theme(legend.position = "none")
@@ -1098,7 +1095,7 @@ p_dd <- ggplot(dd_tibble, aes(x, y, color = state)) +
   geom_point() + 
   geom_line() +
   theme_bw() +
-  scale_color_npg() +
+  scale_color_manual(values = npg_colors_2) +
   labs(x = "Degree", y = "Frequency") +
   theme(legend.title = element_blank(), legend.position = c(0.87, 0.87)) 
 ```
@@ -1115,7 +1112,7 @@ nc_tibble <- bind_rows(
 p_nc <- ggplot(nc_tibble, aes(x, y, color = state)) +
   geom_line() +
   theme_bw() + 
-  scale_color_npg() +
+  scale_color_manual(values = npg_colors_2) +
   theme(legend.position = c(0.87, 0.87), legend.title = element_blank()) +
   labs(x = "Percentage of removed nodes", y = "Natural connectivity") 
 ```
@@ -1262,7 +1259,7 @@ p_s5 <- ggplot(marker_genus, aes(state, degree, fill = state)) +
     comparisons = list(c("CR", "HA")), label = "p.signif") +
   theme_bw() +
   theme(legend.position = "none") +
-  scale_fill_npg() +
+  scale_fill_manual(values = npg_colors_2) +
   labs(x = NULL, y = "Degree")
 p_s5
 ggsave("output/figure/figure_s5.pdf", p_s5, width = 7, height = 4)

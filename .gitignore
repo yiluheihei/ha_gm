@@ -6,3 +6,4 @@ data/raw/reads
 data/raw/97_otus.fasta
 analysis_cache
 .DS_store
+output/figure_ppt
