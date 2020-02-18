@@ -1,7 +1,7 @@
 ---
 title: "The effect of heat acclimation on gut microbiota"
 author: "Yang"
-date: "2019/12/11"
+date: "`r Sys.Date()`"
 output: 
   html_document:
     toc: true
@@ -53,11 +53,11 @@ library(furrr)
 library(writexl) # write table s6
 ```
 
-```{r source_script}
+```{r source_script,cache=FALSE}
 sourceDir <- function(path, trace = TRUE, ...) {
   for (nm in list.files(path, pattern = "[.][RrSsQq]$")) {
     if (!grepl("visualize_save_network", nm, fixed = TRUE)) {
-      if (trace) cat(nm,":")      
+      # if (trace) cat(nm,":")      
       source(file.path(path, nm), ...)
       if (trace) cat("\n")
     } else {
@@ -1264,6 +1264,487 @@ p_s5 <- ggplot(marker_genus, aes(state, degree, fill = state)) +
 p_s5
 ggsave("output/figure/figure_s5.pdf", p_s5, width = 7, height = 4)
 ```
+
+# The effects of HA on facel metabolome
+
+20 samples (10 HA and 10 CR) were subjectd to untargeted LC-MS metabolomic 
+analysis.
+
+## load data
+
+```{r load-metabolome-data}
+library(MetaboAnalystR)
+neg_metabolome <- readxl::read_xlsx("data/metabolome/raw/neg.xlsx")
+neg_peak_table <- dplyr::select(neg_metabolome, neg_H_1_4:neg_C_8_4)
+samples_name <- names(neg_peak_table)
+samples_group <- ifelse(grepl("_H_", samples_name), "HA", "CR")
+neg_MetaboAnalystR_in <- rbind(samples_group, neg_peak_table) %>% 
+  cbind(Sample = c("label", neg_metabolome$ID), .)
+readr::write_csv(neg_MetaboAnalystR_in, "data/metabolome/output/neg_MetaboAnalystR_in.csv") 
+
+# positive ion mode
+pos_metabolome <- readxl::read_xlsx("data/metabolome/raw/pos.xlsx")
+pos_peak_table <- dplyr::select(pos_metabolome, pos_H_1_4:pos_C_8_4)
+pos_samples_name <- names(pos_peak_table)
+pos_samples_group <- ifelse(grepl("_H_", pos_samples_name), "HA", "CR")
+pos_MetaboAnalystR_in <- rbind(pos_samples_group, pos_peak_table) %>% 
+  cbind(Sample = c("label", pos_metabolome$ID), .)
+readr::write_csv(pos_MetaboAnalystR_in, "data/metabolome/output/pos_MetaboAnalystR_in.csv") 
+```
+
+## normalizaiton
+
+```{r metabolome-norm}
+neg_mset <- InitDataObjects("pktable", "stat", FALSE)
+neg_mset <- Read.TextData(
+  neg_mset, 
+  "data/metabolome/output/neg_MetaboAnalystR_in.csv", 
+  "colu", 
+  "disc"
+)
+neg_mset <- SanityCheckData(neg_mset)
+neg_mset <- ReplaceMin(neg_mset)
+# neg_mset <- FilterVariable(neg_mset, "iqr", "F", 25)
+
+# normalization
+neg_mset <- PreparePrenormData(neg_mset)
+# log transformation and autoscale
+neg_mset <- Normalization(
+  neg_mset, 
+  rowNorm = "NULL", 
+  transNorm = "LogNorm", 
+  scaleNorm = "AutoNorm", 
+  ratio = FALSE, 
+  ratioNum = 20
+)
+
+## positive mode
+pos_mset <- InitDataObjects("pktable", "stat", FALSE)
+pos_mset <- Read.TextData(pos_mset, "data/metabolome/output/pos_MetaboAnalystR_in.csv", 
+  "colu", "disc")
+pos_mset <- SanityCheckData(pos_mset)
+pos_mset <- ReplaceMin(pos_mset)
+# normalization
+pos_mset <- PreparePrenormData(pos_mset)
+# log transformation and autoscale
+# parameters were determined according to "https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0498-0#Sec10"
+pos_mset <- Normalization(pos_mset, "NULL", "LogNorm", "AutoNorm")
+```
+
+## pca
+
+```{r metabolome-pca}
+neg_mset <- PCA.Anal(neg_mset)
+neg_mset <- PlotPCA2DScore(
+  neg_mset, 
+  "data/metabolome/output/neg_pca",
+  format = "png",
+  dpi = 300,
+  width = NA,
+  pcx = 1,
+  pcy = 2,
+  reg = 0.95,
+  show = 0,
+  grey.scale = 0
+)
+
+# positive mode
+pos_mset <- PCA.Anal(pos_mset)
+pos_mset <- PlotPCA2DScore(
+  pos_mset,
+  "data/metabolome/output/pos_pca",
+  dpi = 300,
+  width = NA,
+  pcx = 1,
+  pcy = 2,
+  reg = 0.95,
+  show = 0,
+  grey.scale = 0
+)
+```
+
+```{r graph-metabolome-pca}
+metabolome_pca_plots <- c(
+  "data/metabolome/output/neg_pcadpi300.png", 
+  "data/metabolome/output/pos_pcadpi300.png"
+)
+include_graphics(metabolome_pca_plots)
+```
+
+## pls-da
+
+```{r metabolome-plsda}
+# nagtive mode
+neg_mset <- PLSR.Anal(neg_mset, reg = TRUE)
+neg_mset <- PlotPLS2DScore(
+  neg_mset, 
+  "data/metabolome/output/neg_plsda", 
+  dpi = 300, 
+  width = NA, 
+  inx1  = 1, 
+  inx2 = 2, 
+  reg = 0.95, 
+  show = 0, 
+  grey.scale = 0
+)
+
+# validation, 10 fold cross-valication
+neg_mset <- PLSDA.CV(neg_mset, "T", 5, "Q2")
+neg_mset <- PlotPLS.Classification(
+  neg_mset, 
+  "data/metabolome/output/neg_pls_cv", 
+  dpi = 300, 
+  width = NA
+)
+
+# positive mode
+pos_mset <- PLSR.Anal(pos_mset, reg = TRUE)
+pos_mset <- PlotPLS2DScore(
+  pos_mset, 
+  "data/metabolome/output/pos_plsda", 
+  dpi = 300, 
+  width = NA, 
+  inx1 = 1, 
+  inx2 = 2, 
+  reg = 0.95, 
+  show = 0, 
+  grey.scale = 0
+)
+
+# validation, 10 fold cross-valication
+pos_mset <- PLSDA.CV(pos_mset, "T", 5, "Q2")
+pos_mset <- PlotPLS.Classification(
+  pos_mset, 
+  "data/metabolome/output/pos_pls_cv", 
+  dpi = 300, 
+  width = NA
+)
+```
+
+```{r graph-metabolome-plsda}
+plsda_plots <- list.files(
+  "data/metabolome/output", 
+  "plsdadpi300", 
+  full.names = TRUE
+)
+include_graphics(plsda_plots)
+```
+
+```{r graph-metabolome-plsda-cv}
+pls_cv_plots <- list.files(
+  "data/metabolome/output", 
+  "pls_cvdpi300", 
+  full.names = TRUE
+)
+include_graphics(pls_cv_plots)
+```
+
+```{r pls-da-r2-q2}
+neg_mset$analSet$plsda$fit.info[2:3, 2]
+pos_mset$analSet$plsda$fit.info[2:3, 2]
+```
+
+## differential analysis
+
+```{r metabolome-differential}
+# negative
+neg_mset <- FC.Anal.unpaired(neg_mset, 2.0, 1)
+neg_mset <- PlotFC(
+  neg_mset, 
+  "data/metabolome/output/neg_fc", 
+  dpi = 300, 
+  width = NA
+)
+
+# positive
+pos_mset <- FC.Anal.unpaired(pos_mset, 2.0, 1)
+pos_mset <- PlotFC(
+  pos_mset, 
+  "data/metabolome/output/pos_fc", 
+  dpi = 300, 
+  width = NA
+)
+
+neg_mset <- Ttests.Anal(
+  neg_mset, 
+  nonpar = TRUE, 
+  0.05, 
+  FALSE, 
+  TRUE, 
+  all_results = TRUE
+)
+
+pos_mset <- Ttests.Anal(
+  pos_mset, 
+  nonpar = TRUE, 
+  0.05, 
+  FALSE, 
+  TRUE, 
+  all_results = TRUE
+)
+
+# 
+neg_diff_feature <- get_diff_feature(neg_mset, vip_th = 2)
+pos_diff_feature <- get_diff_feature(pos_mset, vip_th = 2.5)
+```
+
+## pathway enrichment analysis
+
+Pathway enrichment analysis was performed using mummichog and gsea algorithm.
+
+```{r metabolome-enrich}
+# generate input for mummichog
+neg_mummichog <- generate_mummichog_in(neg_metabolome, neg_mset)
+readr::write_tsv(neg_mummichog, "data/metabolome/output/neg_mummichog.txt")
+
+neg_mummichog_set <- InitDataObjects(
+  "mass_all", 
+  "mummichog",
+  FALSE
+)
+SetPeakFormat("mpt")
+neg_mummichog_set <- UpdateInstrumentParameters(
+  neg_mummichog_set, 
+  "5.0",
+  "negative"
+)
+neg_mummichog_set <- Read.PeakListData(
+  neg_mummichog_set, 
+  "data/metabolome/output/neg_mummichog.txt"
+)
+neg_mummichog_set <- SanityCheckMummichogData(neg_mummichog_set)
+# neg_mummichog_set <- SetPeakEnrichMethod(neg_mummichog_set, "mum")
+# neg_mummichog_set <- SetMummichogPval(neg_mummichog_set, 0.25)
+# neg_mummichog_set <- PerformPSEA(neg_mummichog_set, "rno_kegg", 
+#   permNum = 1000)
+# 
+# neg_mummichog_set <- SetPeakEnrichMethod(neg_mummichog_set, "mum")
+# neg_mummichog_set <- SetMummichogPval(neg_mummichog_set, 0.25)
+# neg_mummichog_set <- PerformPSEA(neg_mummichog_set, "rno_kegg", 
+#   permNum = 1000)
+# 
+# neg_mummichog_set <- SetPeakEnrichMethod(neg_mummichog_set, "gsea")
+# neg_mummichog_set <- PerformPSEA(neg_mummichog_set, "rno_kegg", 
+#   permNum = 1000)
+
+neg_mummichog_set <- SetPeakEnrichMethod(neg_mummichog_set, "integ")
+neg_mummichog_set <- SetMummichogPval(neg_mummichog_set, 0.25)
+neg_mummichog_set <- PerformPSEA(
+  neg_mummichog_set, 
+  "rno_kegg", 
+  permNum = 1000
+)
+neg_mummichog_set <- PlotIntegPaths(
+  neg_mummichog_set, 
+  "data/metabolome/output/neg_integ_peaks_", 
+  dpi = 300
+)
+
+neg_pathway_enrich <- readr::read_csv("mummichog_integ_pathway_enrichment.csv") %>% 
+    dplyr::rename(`Pathway Name` = X1)
+neg_matched_compound <- readr::read_csv("mummichog_matched_compound_all.csv")
+
+## positive mode ---------------
+pos_mummichog <- generate_mummichog_in(pos_metabolome, pos_mset)
+readr::write_tsv(pos_mummichog, "data/metabolome/output/pos_mummichog.txt")
+
+pos_mummichog_set <- InitDataObjects(
+  "mass_all", 
+  "mummichog",
+  FALSE
+)
+SetPeakFormat("mpt")
+pos_mummichog_set <- UpdateInstrumentParameters(
+  pos_mummichog_set, 
+  "5.0",
+  "positive"
+)
+pos_mummichog_set <- Read.PeakListData(
+  pos_mummichog_set, 
+  "data/metabolome/output/pos_mummichog.txt"
+)
+pos_mummichog_set <- SanityCheckMummichogData(pos_mummichog_set)
+pos_mummichog_set <- SetPeakEnrichMethod(pos_mummichog_set, "integ")
+pos_mummichog_set <- SetMummichogPval(pos_mummichog_set, 0.25)
+pos_mummichog_set <- PerformPSEA(
+  pos_mummichog_set, 
+  "rno_kegg", 
+  permNum = 1000
+)
+pos_mummichog_set <- PlotIntegPaths(
+  pos_mummichog_set, 
+  "data/metabolome/output/pos_integ_peaks_", 
+  dpi = 300
+)
+pos_pathway_enrich <- readr::read_csv("mummichog_integ_pathway_enrichment.csv") %>%
+  dplyr::rename(`Pathway Name` = X1)
+pos_matched_compound <- readr::read_csv("mummichog_matched_compound_all.csv")
+```
+
+pathway graph
+
+```{r metabolome-pathway-graph}
+pathway_plots <- list.files(
+  "data/metabolome/output", 
+  "integ_peaks_dpi300", 
+  full.names = TRUE
+)
+include_graphics(pathway_plots)
+```
+
+enrich pathway info
+
+```{r metabolome-pathway-info}
+kable(head(neg_pathway_enrich, n = 5L))
+kable(head(pos_pathway_enrich, n = 5L))
+```
+
+which different compound in the enrich pathway?
+
+```{r metabolome-compound-pathway}
+neg_overlap_diff <- left_join(
+  neg_diff_feature, neg_metabolome, 
+  by = c("name" = "ID")) %>%
+  select(name, vip, p_value, t_score, fc, `Molecular Weight`) %>%
+  semi_join(neg_matched_compound, by = c("Molecular Weight" = "Query.Mass")) %>%
+  arrange(fc, p_value, vip)
+  
+
+pos_overlap_diff <- left_join(
+  pos_diff_feature, pos_metabolome, 
+  by = c("name" = "ID")) %>% 
+  select(name, vip, p_value, t_score, fc, `Molecular Weight`) %>%
+  semi_join(pos_matched_compound, by = c("Molecular Weight" = "Query.Mass")) %>% 
+  arrange(fc, p_value, vip)
+
+# 差异化合物
+rbind(
+  left_join(neg_overlap_diff, neg_metabolome, by = c("name" = "ID")) %>% 
+    select(Name_des, vip, fc, p_value),
+  left_join(pos_overlap_diff, pos_metabolome, by = c("name" = "ID")) %>% 
+    select(Name_des, vip, fc, p_value)
+) %>% 
+  arrange(desc(fc)) %>%
+  mutate(vip = round(vip, 2), fc = round(fc, 2), p_value = round(p_value, 3)) %>%
+  kable()
+```
+
+
+heatmap of different compound
+
+```{r metabolome-compound-heatmap}
+# neg_novo_scaled <- select(neg_novo, neg_H_1_4:neg_C_8_4) %>% 
+#   scale() %>% 
+#   as_tibble() 
+# neg_novo_scaled$ID <- neg_novo$ID
+# neg_novo_scaled$Name_des <- neg_novo$Name_des
+
+neg_diff_abund <- 
+  left_join(
+    neg_overlap_diff, 
+    neg_metabolome, 
+    by = c("name" = "ID")
+  ) %>% 
+  select(Name_des, neg_H_1_4:neg_C_8_4) %>% 
+  column_to_rownames("Name_des")
+
+# pos_novo_scaled <- select(pos_novo, pos_H_1_4:pos_C_8_4) %>% 
+#   scale() %>% 
+#   as_tibble() 
+# pos_novo_scaled$ID <- pos_novo$ID
+# pos_novo_scaled$Name_des <- pos_novo$Name_des
+pos_diff_abund <- 
+  left_join(
+    pos_overlap_diff, 
+    pos_metabolome, 
+    by = c("name" = "ID")
+  ) %>% 
+  select(Name_des, pos_H_1_4:pos_C_8_4) %>% 
+  column_to_rownames("Name_des")
+
+# no overlap between negtive and postive mode
+intersect(row.names(neg_diff_abund), row.names(pos_diff_abund))
+
+# make sure samples are consistent between negative and positive mode
+all(
+  stringr::str_replace_all(colnames(neg_diff_abund), "neg_", "") ==
+  stringr::str_replace_all(colnames(pos_diff_abund), "pos_", "")
+)
+
+colnames(neg_diff_abund) <- str_replace_all(
+  colnames(neg_diff_abund), 
+  "neg_", ""
+)
+colnames(pos_diff_abund) <- str_replace_all(
+  colnames(pos_diff_abund), 
+  "pos_", ""
+)
+
+# fold change 热图
+neg_mean_h <- neg_diff_abund[, 1:10] %>% rowMeans()
+neg_mean_c <- neg_diff_abund[, 11:20] %>% rowMeans()
+
+neg_diff_abund_fc1 <- sweep(neg_diff_abund[, 1:10], 1, neg_mean_c, FUN = "/")
+neg_diff_abund_fc2 <- sweep(neg_diff_abund[, 11:20], 1, neg_mean_h, FUN = "/")
+neg_diff_abund_fc <- cbind(neg_diff_abund_fc1, neg_diff_abund_fc2)
+
+
+pos_mean_h <- pos_diff_abund[, 1:10] %>% rowMeans()
+pos_mean_c <- pos_diff_abund[, 11:20] %>% rowMeans()
+
+pos_diff_abund_fc1 <- sweep(pos_diff_abund[, 1:10], 1, pos_mean_c, FUN = "/")
+pos_diff_abund_fc2 <- sweep(pos_diff_abund[, 11:20], 1, pos_mean_h, FUN = "/")
+pos_diff_abund_fc <- cbind(pos_diff_abund_fc1, pos_diff_abund_fc2)
+
+
+diff_abund_heatmap <- Heatmap(
+  rbind(neg_diff_abund_fc, pos_diff_abund_fc) %>% log2(),
+  show_row_names = TRUE,
+  clustering_distance_columns = "spearman",
+  #clustering_distance_rows = "spearman",
+  #clustering_method_columns = "centroid",
+  #show_row_names = FALSE,
+  col = c("steelblue", "#EEEEEE", "red"),
+  #col = circlize::colorRamp2(c(-5, 0, 5), c("blue", "white", "red")),
+  heatmap_legend_param = list(
+    title = "log2 Fold Change",
+    title_position = "lefttop-rot"
+  )
+)
+draw(diff_abund_heatmap)
+```
+
+# Correlation between microbiome and metabolome
+
+```{r correlation-microbiome-metabolome}
+sig_diff_genus <- filter(genus_p, 
+  Genus %in% paste0("g__", c("Lactobacillus", "Oscillospira", "Blautia",
+    "Allobaculum"))
+)
+sig_genus <- bind_cols(map(sig_diff_genus$abdlist, unlist))
+names(sig_genus) <- as.character(sig_diff_genus$Genus)
+sig_metabolits <- t(rbind(neg_diff_abund, pos_diff_abund)[, c(13:20, 1:8)])
+
+correlation <- cor(cbind(sig_genus, sig_metabolits), method = "spearman") 
+
+ggcorrplot::ggcorrplot(correlation, outline.color = "white",
+  colors = c("steelblue", "#EEEEEE", "red")
+) + theme(axis.text.x = element_text(angle = 90))
+
+# delete the redundunt correlation
+correlation2 <- correlation[1:4, 5:17]
+match(c("(S)-AL 8810", "Celastrol"), colnames(correlation2))
+corr3 <- correlation2[match(paste0("g__", c("Lactobacillus", "Oscillospira",
+  "Blautia", "Allobaculum")), row.names(correlation2)), c(6, 13, setdiff(1:13, c(6, 13)))]
+ggcorrplot::ggcorrplot(corr3, outline.color = "white",
+  colors = c("steelblue", "#EEEEEE", "red")
+)
+```
+
+
+
+
+
 
 ## SessionInfo
 
